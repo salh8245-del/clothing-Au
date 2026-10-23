@@ -123,8 +123,8 @@ function renderProductSuggestions(f,query){
 const curRate=()=>{const r=db.rates.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop();return r?n(r.rate):0};
 const pc=p=>p.costUsd?p.costUsd*curRate():n(p.cost);
 /* دوال الربح الموحدة (للمبيعات والتقارير) */
-const saleNet=s=>n(s.qty)*n(s.price)-n(s.discount);
-const saleProfit=s=>saleNet(s)-n(s.cost)*n(s.qty);
+const saleNet=s=>s.type==='exchange'?n(s.diff):n(s.qty)*n(s.price)-n(s.discount);
+const saleProfit=s=>saleNet(s)-(s.type==='exchange'?n(s.costAdj):n(s.cost)*n(s.qty));
 const banner=()=>{const ok=db.rates.some(x=>x.date===today()),r=curRate();return `<div class="card"><form onsubmit="setRate(event)"><label>${ok?'💱 سعر صرف اليوم':'💱 أدخل سعر صرف اليوم'}<input name="r" type="number" step="0.001" value="${r||''}" required></label><button class="go">💾 حفظ الصرف</button></form></div>`};
 
 function render(){
@@ -155,9 +155,15 @@ const views={
 
   sale(){
     const rows=db.sales.slice(-40).reverse().map(s=>{
-      const total=n(s.qty)*n(s.price),disc=n(s.discount),costT=n(s.cost)*n(s.qty),pr=saleProfit(s);
+      const ex=s.type==='exchange',costT=ex?n(s.costAdj):n(s.cost)*n(s.qty),pr=saleProfit(s),disc=n(s.discount);
+      const tag=s.exch?`<br><small class="low">${esc(s.exch)}</small>`:'';
+      if(ex){
+        const d=n(s.diff);
+        return `<tr><td>${s.date}</td><td><b>🔄 ${pname(prod(s.pid))}</b> (${s.oq}−) ⇄ <b>${pname(prod(s.npid))}</b> (${s.nq}+)${s.note?' – '+esc(s.note):''}</td><td>${esc(s.cust||'-')}</td><td>${s.oq}− / ${s.nq}+</td><td>${fmt(d)}</td><td><b>${fmt(d)}</b></td><td>${fmt(costT)}</td><td class="${pr>=0?'ok':'low'}"><b>${fmt(pr)}</b></td><td><span class="${d>=0?'ok':'low'}">🔄 استبدال ${d>0?'(زيادة)':d<0?'(نقصان)':'(بلا فرق)'}</span></td></tr>`;
+      }
+      const total=n(s.qty)*n(s.price);
       const st=n(s.qty)<0?'<span class="low">↩️ مرتجع</span>':n(s.debt)>0?`<span class="low">آجل (دين: ${fmt(s.debt)})</span>`:disc>0?`<span class="ok">نقدي (خصم ${fmt(disc)})</span>`:'<span class="ok">نقدي</span>';
-      return `<tr><td>${s.date}</td><td><b>${pname(prod(s.pid))}</b>${s.note?' ('+esc(s.note)+')':''}</td><td>${esc(s.cust||'-')}</td><td><b>${s.qty}</b></td><td>${fmt(total)}</td><td><b>${fmt(s.paid)}</b></td><td>${fmt(costT)}</td><td class="${pr>=0?'ok':'low'}"><b>${fmt(pr)}</b></td><td>${st}</td></tr>`;
+      return `<tr><td>${s.date}</td><td><b>${pname(prod(s.pid))}</b>${s.note?' ('+esc(s.note)+')':''}${tag}</td><td>${esc(s.cust||'-')}</td><td><b>${s.qty}</b></td><td>${fmt(total)}</td><td><b>${fmt(s.paid)}</b></td><td>${fmt(costT)}</td><td class="${pr>=0?'ok':'low'}"><b>${fmt(pr)}</b></td><td>${st}</td></tr>`;
     });
     return `<div class="card"><h3>🛍️ فاتورة بيع جديدة</h3>
       <div id="pinfo" class="box-highlight">اكتب كود أو اسم المنتج لعرض التكلفة والربح</div>
@@ -168,6 +174,7 @@ const views={
         <label>الكمية المباعة<input name="qty" type="number" min="1" step="1" value="1"></label>
         <label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل / دين</option></select></label>
         <label>💰 المبلغ المدفوع الفعلي (إجمالي الفاتورة)<input name="paid" type="number" step="0.01" placeholder="فارغ = السعر كاملاً"></label>
+        <label>📅 تاريخ الفاتورة<input name="date" type="date" value="${today()}" max="${today()}" required></label>
         <label>اسم الزبون<input name="cust" placeholder="اسم الزبون"></label>
         <label>المبلغ المتبقي (الدين)<input name="debt" type="number" step="0.01" readonly></label>
         <button class="go" style="grid-column:1/-1">💾 إتمام وحفظ البيع</button>
@@ -183,30 +190,33 @@ const views={
   },
 
   rs(){
-    return `<div class="card"><h3>🔄 مرتجع أو تبديل منتج</h3>
+    const dt=`<label>📅 تاريخ الفاتورة الأصلية (للتحقق من البيع)<input name="idate" type="date" value="${today()}" max="${today()}" required></label>`;
+    return `<div class="card"><h3>🔄 مرتجع أو استبدال منتج</h3>
       <div style="display:flex;gap:10px;margin-bottom:14px">
         <button class="go" style="${rsType==='return'?'':'background:#aaa'}" onclick="setRsType('return')">↩️ مرتجع (إرجاع واسترداد)</button>
-        <button class="go" style="${rsType==='exchange'?'':'background:#aaa'}" onclick="setRsType('exchange')">🔄 تبديل قطعتين</button>
+        <button class="go" style="${rsType==='exchange'?'':'background:#aaa'}" onclick="setRsType('exchange')">🔄 استبدال قطعة</button>
       </div>
       ${rsType==='return'?`
         <form onsubmit="addReturn(event)" oninput="rsSearchInput(this)">
           <div style="grid-column:1/-1" class="box-highlight"><b>↩️ بيانات القطعة المرجعة:</b></div>
+          ${dt}
           <label>كود أو اسم المنتج المرجع<input name="code" autocomplete="off" required placeholder="الكود أو الاسم"></label>
           <label>الكمية المرجعة<input name="qty" type="number" min="1" value="1" required></label>
           <label>المبلغ المسترد للزبون<input name="amt" type="number" step="0.01" required placeholder="المبلغ المُعاد"></label>
-          <button class="go" style="grid-column:1/-1">💾 حفظ المرتجع وخصمه من المبيعات</button>
+          <button class="go" style="grid-column:1/-1">💾 حفظ المرتجع وخصمه من مبيعات اليوم</button>
         </form>`:`
         <form onsubmit="addExchange(event)" oninput="rsExSearchInput(this)">
-          <div style="grid-column:1/-1" class="box-highlight"><b>↩️ 1. القطعة المرجعة (تُعاد للمخزون):</b></div>
-          <label>كود أو اسم المنتج المرجع<input name="oldCode" autocomplete="off" required placeholder="كود أو اسم القطعة المرجعة"></label>
-          <label>الكمية المرجعة<input name="oldQty" type="number" min="1" value="1" required></label>
+          <div style="grid-column:1/-1" class="box-highlight"><b>↩️ 1. القطعة القديمة (تعود للمخزون وتبقى مبيعتها في تاريخها):</b></div>
+          ${dt}
+          <label>كود أو اسم القطعة القديمة<input name="oldCode" autocomplete="off" required></label>
+          <label>الكمية القديمة<input name="oldQty" type="number" min="1" value="1" required></label>
           <div style="grid-column:1/-1" class="box-highlight"><b>🆕 2. القطعة الجديدة (تُخصم من المخزون):</b></div>
-          <label>كود أو اسم المنتج الجديد<input name="newCode" autocomplete="off" required placeholder="كود أو اسم القطعة الجديدة"></label>
+          <label>كود أو اسم القطعة الجديدة<input name="newCode" autocomplete="off" required></label>
           <label>الكمية الجديدة<input name="newQty" type="number" min="1" value="1" required></label>
-          <div style="grid-column:1/-1" class="box-highlight"><b>💵 3. الفرق المالي:</b></div>
-          <label>المبلغ (+ دفع الزبون زيادة / − استرد الزبون)<input name="amtDiff" type="number" step="0.01" required value="0"></label>
-          <label>اسم الزبون<input name="cust" placeholder="اختياري"></label>
-          <button class="go" style="grid-column:1/-1">💾 إتمام التبديل وتسجيله في المبيعات</button>
+          <div style="grid-column:1/-1" class="box-highlight"><b>💵 3. الفرق (يُسجَّل وحده في مبيعات اليوم):</b></div>
+          <label>الفرق: + زيادة دفعها الزبون / − نقصان استرده<input name="amtDiff" type="number" step="0.01" required value="0"></label>
+          <label>اسم الزبون<input name="cust" placeholder="اختياري (يؤخذ من الفاتورة الأصلية)"></label>
+          <button class="go" style="grid-column:1/-1">💾 إتمام الاستبدال</button>
         </form>`}
       <div id="pinfo" style="margin-top:10px"></div>
     </div>`;
@@ -266,6 +276,17 @@ const views={
   acct(){
     return `<div class="card"><h3>⚙️ الحساب</h3><p>${esc(auth.currentUser?.email||'')}</p><button class="go" onclick="logout()">🚪 تسجيل الخروج</button></div>`;
   }
+};
+
+/* التحقق من الفاتورة الأصلية: القطعة مباعة بهذا التاريخ ولم تُرجع/تُستبدل بعد */
+const rem=(s,p)=>s.type==='exchange'?(s.npid===p.id?n(s.nq)-n(s.retQty):0):(s.type!=='return'&&s.pid===p.id&&n(s.qty)>0?n(s.qty)-n(s.retQty):0);
+const origs=(p,date)=>db.sales.filter(s=>s.date===date&&rem(s,p)>0);
+const origInfo=(code,date)=>{
+  if(!(code||'').trim())return '';
+  const p=findP(code,code);if(!p)return '<div class="empty">⚠️ المنتج غير موجود.</div>';
+  const L=origs(p,date);
+  if(!L.length)return `<div class="product-suggestion low" style="cursor:default">❌ لا توجد فاتورة بيع للقطعة <b>${esc(p.name)}</b> بتاريخ ${date} (أو سبق إرجاعها/استبدالها كلها).</div>`;
+  return L.map(s=>`<div class="product-suggestion" style="cursor:default">✅ <b>${esc(p.name)}</b> — بتاريخ ${s.date} — الزبون: ${esc(s.cust||'-')} — ${s.type==='exchange'?'قطعة مستلمة باستبدال':'سعر البيع للقطعة: '+fmt(saleNet(s)/n(s.qty))} — القابل للإرجاع: <b>${rem(s,p)}</b></div>`).join('');
 };
 
 /* ===== الدوال ===== */
@@ -351,35 +372,43 @@ W({
     const discount=mode==='cash'?Math.max(0,total-paid):0,debt=mode==='credit'?Math.max(0,total-paid):0,cust=f.cust.value.trim();
     if(debt>0&&!cust)return toast('⚠️ اكتب اسم الزبون للبيع الآجل');
     const b=writeBatch(fs);
-    put(b,'sales',{type:'sale',pid:p.id,date:today(),qty:q,price,paid,discount,debt,cost:pc(p),cust});
+    put(b,'sales',{type:'sale',pid:p.id,date:f.date.value||today(),qty:q,price,paid,discount,debt,cost:pc(p),cust});
     b.update(D('products',p.id),{qty:increment(-q)});
     await b.commit();f.reset();$('#pinfo').innerHTML='اكتب كود أو اسم المنتج لعرض التكلفة والربح';toast('✅ تم حفظ البيع');
   },
 
-  rsSearchInput(f){$('#pinfo').innerHTML=pinfo(f.code.value,f.code.value)},
-  rsExSearchInput(f){$('#pinfo').innerHTML=pinfo(f.oldCode.value,f.oldCode.value)+pinfo(f.newCode.value,f.newCode.value)},
+  rsSearchInput(f){$('#pinfo').innerHTML=origInfo(f.code.value,f.idate.value)},
+  rsExSearchInput(f){$('#pinfo').innerHTML=origInfo(f.oldCode.value,f.idate.value)+pinfo(f.newCode.value,f.newCode.value)},
   async addReturn(e){
     e.preventDefault();const f=e.target,p=findP(f.code.value,f.code.value);
     if(!p)return toast('⚠️ المنتج غير موجود');
-    const q=n(f.qty.value)||1,amt=n(f.amt.value);
+    const q=n(f.qty.value)||1,amt=n(f.amt.value),date=f.idate.value;
+    const o=origs(p,date).find(s=>rem(s,p)>=q);
+    if(!o)return toast('⚠️ لا توجد فاتورة بيع لهذه القطعة بتاريخ '+date+' بهذه الكمية');
+    const cost=o.type==='exchange'?pc(p):n(o.cost),d=today();
     const b=writeBatch(fs);
-    put(b,'sales',{type:'return',note:'مرتجع',pid:p.id,date:today(),qty:-q,price:amt/q,paid:-amt,discount:0,debt:0,cost:pc(p),cust:''});
+    put(b,'sales',{type:'return',note:'مرتجع فاتورة '+date,pid:p.id,date:d,qty:-q,price:amt/q,paid:-amt,discount:0,debt:0,cost,cust:o.cust||'',orig:o.id});
+    b.update(D('sales',o.id),{retQty:increment(q),exch:'↩️ أُرجعت '+q+' بتاريخ '+d});
     b.update(D('products',p.id),{qty:increment(q)});
-    await b.commit();f.reset();toast('✅ تم المرتجع');
+    await b.commit();f.reset();$('#pinfo').innerHTML='';toast('✅ تم المرتجع');
   },
   async addExchange(e){
-    e.preventDefault();const f=e.target;
+    e.preventDefault();const f=e.target,date=f.idate.value;
     const o=findP(f.oldCode.value,f.oldCode.value),nw=findP(f.newCode.value,f.newCode.value);
     if(!o||!nw)return toast('⚠️ تحقق من المنتجين');
     const oq=n(f.oldQty.value)||1,nq=n(f.newQty.value)||1,diff=n(f.amtDiff.value);
+    const orig=origs(o,date).find(s=>rem(s,o)>=oq);
+    if(!orig)return toast('⚠️ لا توجد فاتورة بيع لهذه القطعة بتاريخ '+date+' بهذه الكمية');
     if(nq>n(nw.qty)+(o.id===nw.id?oq:0))return toast('⚠️ المتوفر من الجديد '+nw.qty);
-    const oldVal=n(o.price)*oq,newPaid=oldVal+diff,cust=f.cust.value.trim(),d=today();
+    const oc=orig.type==='exchange'?pc(o):n(orig.cost),costAdj=pc(nw)*nq-oc*oq,cust=f.cust.value.trim()||orig.cust||'',d=today();
     const b=writeBatch(fs);
-    put(b,'sales',{type:'return',note:'تبديل – مرجع',pid:o.id,date:d,qty:-oq,price:n(o.price),paid:-oldVal,discount:0,debt:0,cost:pc(o),cust});
-    put(b,'sales',{type:'sale',note:'تبديل – جديد',pid:nw.id,date:d,qty:nq,price:newPaid/nq,paid:newPaid,discount:0,debt:0,cost:pc(nw),cust});
-    b.update(D('products',o.id),{qty:increment(oq-(o.id===nw.id?nq:0))});
-    if(o.id!==nw.id)b.update(D('products',nw.id),{qty:increment(-nq)});
-    await b.commit();f.reset();toast('✅ تم التبديل');
+    /* سجل واحد: الفرق فقط في مبيعات اليوم + تعديل كلفة القطعتين */
+    put(b,'sales',{type:'exchange',note:'فاتورة '+date,pid:o.id,npid:nw.id,oq,nq,date:d,qty:0,price:0,discount:0,debt:0,paid:diff,diff,costAdj,cost:0,cust,orig:orig.id});
+    /* الفاتورة الأصلية تبقى في تاريخها مع ملاحظة الاستبدال */
+    b.update(D('sales',orig.id),{retQty:increment(oq),exch:'🔄 استُبدلت بـ '+nw.name+' '+(nw.size||'')+' '+(nw.color||'')+' بتاريخ '+d});
+    if(o.id===nw.id)b.update(D('products',o.id),{qty:increment(oq-nq)});
+    else{b.update(D('products',o.id),{qty:increment(oq)});b.update(D('products',nw.id),{qty:increment(-nq)})}
+    await b.commit();f.reset();$('#pinfo').innerHTML='';toast('✅ تم الاستبدال');
   },
 
   async addSup(e){e.preventDefault();const f=e.target,b=writeBatch(fs);put(b,'suppliers',{name:f.name.value.trim(),phone:f.phone.value.trim()});await b.commit();f.reset()},
