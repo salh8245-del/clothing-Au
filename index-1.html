@@ -58,7 +58,7 @@ th{color:var(--mute);font-weight:700}
 <script type="module">
 import {firebaseConfig} from "./firebase-config.js";
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,onSnapshot,writeBatch,increment} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,getDocs,onSnapshot,writeBatch,increment} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 const app=initializeApp(firebaseConfig);
 const fs=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
@@ -252,4 +252,195 @@ const views={
     let det='';
     const cd=C[selCust];
     if(cd){
-      const payRows=db.pay.filter(p=>p.cust===selCust).slice(-15)
+      const payRows=db.pay.filter(p=>p.cust===selCust).slice(-15).reverse().map(p=>`<tr><td>${p.date}</td><td>${fmt(Number(p.amt)||0)}</td><td>${p.kind==='debt'?'دين إضافي':'دفعة سداد'}</td></tr>`);
+      const invRows=cd.inv.slice(-20).reverse().map(i=>`<tr><td>${i.date}</td><td>${pname(prod(i.pid))}</td><td>${fmt(Number(i.qty||0) * Number(i.price||0))}</td><td>${fmt(Number(i.debt)>0 ? Number(i.debt) : (Number(i.qty||0) * Number(i.price||0) - Number(i.paid||0)) )}</td></tr>`);
+      det=`<div class="card"><h3>👤 حساب الزبون: ${esc(selCust)} — المتبقي: <span class="low">${fmt(cd.rem)}</span></h3>${table(['تاريخ الفاتورة','المنتج','القيمة','الدين المتبقي'],invRows,'')}</div><div class="card"><h3>💵 الدفعات المسجلة للزبون</h3>${table(['التاريخ','المبلغ','النوع'],payRows,'لا توجد دفعات.')}</div>`;
+    }
+    return `<div class="card"><h3>📋 ديون الزبائن المستحقة</h3>${table(['الزبون','المبلغ المتبقي','الإجراءات'],rows,'لا توجد ديون على الزبائن.')}</div>${det}`;
+  },
+  
+  rep(){ return `<div class="card"><h3>📊 التقارير والإحصائيات</h3><p class="empty">✨ ستتوفر قريباً مع رسوم بيانية تفصيلية للمبيعات والأرباح.</p></div>`; },
+  
+  acct(){ 
+    return `
+      <div class="card">
+        <h3>⚙️ إعدادات الحساب والنظام</h3>
+        <p>جميع البيانات تُخزن بشكل آمن في قاعدة بيانات Firebase وتعمل بسلاسة تامة حتى بدون إنترنت (Offline Mode).</p>
+        
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <button class="go" onclick="exportJ()">📥 تصدير نسخة احتياطية (JSON)</button>
+          <button class="go" onclick="out()" style="background:linear-gradient(135deg, #7d5f6a 0%, #542a39 100%);">🚪 تسجيل الخروج</button>
+        </div>
+      </div>
+
+      <div class="card" style="border:1px solid #f2b4b4; background:#fff8f8;">
+        <h3 style="color:var(--bad)">⚠️ منطقة الخطر - إعادة ضبط البيانات</h3>
+        <p style="font-size:14px; color:#7a3030; margin-bottom:12px;">
+          تنبيه: هذا الخيار سيقوم بحذف <b>جميع البيانات المسجلة بالكامل</b> (المنتجات، المبيعات، المشتريات، الموردين، المصاريف، والديون) ولن يمكنك استعادتها بعد الحذف.
+        </p>
+        <button class="go" onclick="resetAllData()" style="background:linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); box-shadow:0 8px 18px rgba(192,57,43,0.3);">
+          🗑️ إعادة ضبط المسح الكلي للنظام
+        </button>
+      </div>
+    `;
+  }
+};
+
+const fail=x=>toast('تعذّر الحفظ: '+x.code);
+
+const act={
+  go(k){tab=k;render();},
+  setRate(e){e.preventDefault(); const b=writeBatch(fs); put(b,'rates',{date:today(),rate:n(e.target.elements.r.value)}); b.commit().catch(fail); toast('✅ تم حفظ سعر الصرف'); },
+  login(e){e.preventDefault(); const f=e.target.elements; signInWithEmailAndPassword(auth,f.email.value.trim(),f.pw.value).catch(()=>toast('❌ بيانات الدخول غير صحيحة')); },
+  out(){signOut(auth);},
+  
+  addP(e){
+    e.preventDefault();
+    const f=e.target.elements;
+    const code=(f.code.value||'').trim();
+    const q=Math.max(0,Math.floor(n(f.qty.value)));
+    const tot=n(f.tot.value);
+    const unit=n(f.usd.value);
+    const sid=f.sid.value;
+    const total = tot>0 ? tot : (unit>0 ? unit*q : 0);
+    if(!code) return toast('اكتب كود المنتج');
+    if(!f.name.value.trim()) return toast('اكتب اسم المنتج');
+    if(q<1) return toast('الكمية يجب أن تكون أكثر من صفر');
+    if(!(total>0)) return toast('اكتب سعر القطعة بالدولار أو إجمالي التكلفة');
+    if(db.products.some(p=>(p.code||'').toLowerCase()===code.toLowerCase())) return toast('هذا الكود مستخدم لمنتج آخر');
+    const debtInfo = debtValue(total, f.mode.value, n(f.debt.value), n(f.paid.value));
+    const paid = f.mode.value==='cash' ? total : debtInfo.paid;
+    const debt = f.mode.value==='cash' ? 0 : debtInfo.debt;
+    const unitPrice = unit>0 ? unit : (q>0 ? total/q : 0);
+    const b=writeBatch(fs); const pr=doc(C('products'));
+    b.set(pr,{code,name:f.name.value.trim(),size:f.size.value.trim(),color:f.color.value.trim(),supId:sid,costUsd:unitPrice,price:n(f.price.value),qty:q,ts:Date.now()});
+    if(q>0) put(b,'purchases',{date:today(),pid:pr.id,sid,qty:q,costUsd:unitPrice,paid,debt});
+    b.commit().catch(fail); toast(debt>0.005?'✅ تمت إضافة المنتج والدين للمورد: '+fmt(debt)+' $':'✅ تمت إضافة المنتج بنجاح'); e.target.reset();
+  },
+  
+  setCode(id){ const c=(prompt('الكود الجديد')||'').trim(); if(!c) return; if(db.products.some(p=>(p.code||'').toLowerCase()===c.toLowerCase())) return toast('الكود مستخدم'); const b=writeBatch(fs); b.update(D('products',id),{code:c}); b.commit(); },
+  delP(id){ const p=prod(id); if(!confirm('هل تريد حذف المنتج: '+p.name+'؟')) return; const b=writeBatch(fs); b.delete(D('products',id)); b.commit(); },
+  upP(id){ const p=prod(id); if(!p) return; const newName=prompt('اسم المنتج الجديد',p.name); if(newName===null) return; const b=writeBatch(fs); b.update(D('products',id),{name:newName.trim()||p.name}); b.commit(); },
+  
+  addS(e){
+    e.preventDefault();
+    const f=e.target.elements;
+    const p=findP(f.code.value,f.name.value);
+    if(!p) return toast('⚠️ المنتج غير موجود، تأكد من الكود أو الاسم');
+    const q=Math.max(0,Math.floor(n(f.qty.value))); const price=n(f.price.value); const total=q*price; const cust=(f.cust.value||'').trim();
+    if(q<1) return toast('الكمية يجب أن تكون أكثر من صفر');
+    if(q>p.qty) return toast('⚠️ الكمية المتوفرة في المخزون هي '+p.qty+' فقط');
+    if(f.mode.value==='credit'&&!cust) return toast('اكتب اسم الزبون لتسجيل الدين الآجل');
+    const debtInfo = debtValue(total, f.mode.value, n(f.debt.value), n(f.paid.value));
+    const paid = f.mode.value==='cash' ? total : debtInfo.paid;
+    const debt = f.mode.value==='cash' ? 0 : debtInfo.debt;
+    const b=writeBatch(fs); 
+    b.update(D('products',p.id),{qty:increment(-q)}); 
+    put(b,'sales',{date:today(),pid:p.id,qty:q,price:price,list:p.price,cost:pc(p),cust,paid,debt}); 
+    b.commit().catch(fail); 
+    toast('✅ تم حفظ عملية البيع بنجاح'); 
+    e.target.reset();
+    const list = $('#productSearchList'); if(list) list.innerHTML = '';
+    const pinfoEl = $('#pinfo'); if(pinfoEl) pinfoEl.innerHTML = '';
+  },
+  
+  addB(e){
+    e.preventDefault();
+    const f=e.target.elements; const p=findP(f.code.value,f.nm.value); if(!p) return toast('⚠️ المنتج غير موجود');
+    const q=Math.max(0,Math.floor(n(f.qty.value))); const total = n(f.tot.value)>0 ? n(f.tot.value) : q*n(f.usd.value); const sid=f.sid.value;
+    if(q<1||!(total>0)) return toast('اكتب سعر القطعة أو إجمالي الفاتورة');
+    const debtInfo = debtValue(total, f.mode.value, n(f.debt.value), n(f.paid.value));
+    const paid = f.mode.value==='cash' ? total : debtInfo.paid; const debt = f.mode.value==='cash' ? 0 : debtInfo.debt;
+    if(debt>0.005&&!sid) return toast('اختر المورد لتسجيل الدين');
+    const b=writeBatch(fs); b.update(D('products',p.id),{qty:increment(q),costUsd:q>0?total/q:0}); put(b,'purchases',{date:today(),pid:p.id,sid,qty:q,costUsd:q>0?total/q:0,paid,debt}); b.commit().catch(fail); toast('✅ تم حفظ الشراء'); e.target.reset();
+  },
+  
+  addSup(e){ e.preventDefault(); const b=writeBatch(fs); put(b,'suppliers',{name:e.target.elements.name.value.trim()}); b.commit().catch(fail); toast('✅ تمت إضافة المورد'); e.target.reset(); },
+  paySup(id){ const v=n(prompt('مبلغ الدفعة بالدولار ($):')); if(v<=0) return; const b=writeBatch(fs); put(b,'spay',{date:today(),sid:id,amt:v}); b.commit(); toast('✅ تم تسجيل الدفعة للمورد'); },
+  setCust(c){selCust=c; render();},
+  addCustDebt(e){ e.preventDefault(); const f=e.target.elements; const cust=(f.cust.value||'').trim(); const amt=n(f.amt.value); if(!cust||amt<=0) return toast('اكتب اسم الزبون ومبلغ الدين'); const b=writeBatch(fs); put(b,'pay',{date:today(),cust,amt,kind:'debt'}); b.commit().catch(fail); toast('✅ تمت إضافة الدين'); e.target.reset(); },
+  addE(e){ e.preventDefault(); const f=e.target.elements; const b=writeBatch(fs); put(b,'expenses',{date:f.date.value||today(),desc:f.desc.value.trim(),amt:n(f.amt.value)}); b.commit().catch(fail); toast('✅ تم حفظ المصروف'); e.target.reset(); },
+  delE(id){ if(!confirm('حذف هذا المصروف؟')) return; const b=writeBatch(fs); b.delete(D('expenses',id)); b.commit(); },
+  
+  slCalc(f,e){
+    const targetName = e.target ? e.target.name : '';
+    const searchVal = (f.search && f.search.value || '').trim();
+    const nameVal = (f.name && f.name.value || '').trim();
+    const codeVal = (f.code && f.code.value || '').trim();
+    
+    if(targetName === 'search' || targetName === 'name' || targetName === 'code') {
+      const q = searchVal || nameVal || codeVal;
+      renderProductSuggestions(f, q);
+    }
+    
+    const p = findP(codeVal, nameVal || searchVal);
+    if(p){ 
+      if(f.name && !f.name.value) f.name.value = p.name;
+      if(f.code && !f.code.value) f.code.value = p.code;
+      if(f.price) f.price.value = p.price; 
+    }
+    const text = pinfo(codeVal, nameVal || searchVal);
+    $('#pinfo').innerHTML = text;
+  },
+
+  byCalc(f,e){ const p=findP(f.code.value,f.nm.value); if(p){ f.usd.value = p.costUsd || ''; } $('#pinfo').innerHTML=pinfo(f.code.value,f.nm.value); },
+  setSup(v){selSup=v; render();},
+  
+  fillProductFromSuggestion(id){ 
+    const p = db.products.find(x => x.id === id); 
+    if(!p) return; 
+    const form = document.querySelector('form[onsubmit="addS(event)"]'); 
+    if(!form) return; 
+    form.name.value = p.name; 
+    form.code.value = p.code; 
+    form.price.value = p.price; 
+    if(form.search) form.search.value = p.name; 
+    const list = $('#productSearchList');
+    if(list) list.innerHTML = '';
+    const pinfoEl = $('#pinfo');
+    if(pinfoEl) pinfoEl.innerHTML = `<div class="product-suggestion" style="cursor:default">✅ تم اختيار: <b>${esc(p.name)}</b> • مقاس: ${esc(p.size)} • لون: ${esc(p.color)} • <b>الكمية المتاحة: ${p.qty}</b></div>`;
+  },
+  
+  exportJ(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'})); a.download='Au-Clothing-Backup-'+today()+'.json'; a.click(); },
+
+  async resetAllData(){
+    if(!confirm("⚠️ هل أنت متأكد تماماً من رغبتك في مسح كل شيء من النظام؟\nهذا الإجراء سيحذف كافة المنتجات والمبيعات والديون فوراً!")) return;
+    
+    const confirmText = prompt("لإتمام عملية الحذف النهائي، اكتب كلمة (حذف) أو (DELETE) في الخانة أدناه:");
+    if(!confirmText || (confirmText.trim() !== 'حذف' && confirmText.trim().toUpperCase() !== 'DELETE')){
+      return toast("❌ تم إلغاء عملية إعادة الضبط (لم يتم إدخال الكلمة الصحيحة)");
+    }
+
+    toast("⏳ جاري جلب البيانات للمسح الشامل...");
+
+    try {
+      let totalDeleted = 0;
+      for (const k of NAMES) {
+        const querySnapshot = await getDocs(C(k));
+        if (!querySnapshot.empty) {
+          const b = writeBatch(fs);
+          querySnapshot.forEach(docSnap => {
+            b.delete(docSnap.ref);
+            totalDeleted++;
+          });
+          await b.commit();
+        }
+      }
+
+      if (totalDeleted === 0) {
+        toast("النظام فارغ بالفعل، لا توجد بيانات لحذفها.");
+      } else {
+        toast("✅ تم مسح جميع البيانات من قاعدة البيانات بنجاح!");
+        setTimeout(() => location.reload(), 1500);
+      }
+    } catch (err) {
+      fail(err);
+    }
+  }
+};
+
+Object.assign(window,act);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
