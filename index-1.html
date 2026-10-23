@@ -25,7 +25,6 @@ input,select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;b
 input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(217,109,149,.12);outline:none}
 input[readonly]{background:#fff5f8}
 
-/* أزرار احترافية وفخمة */
 button.go{background:linear-gradient(135deg,var(--acc) 0%,var(--acc-2) 100%);color:#fff;border:none;border-radius:10px;padding:11px 18px;font:inherit;font-weight:800;cursor:pointer;align-self:end;box-shadow:0 8px 18px rgba(196,75,123,.22);display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .2s ease}
 button.go:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(196,75,123,.3)}
 button.go:active{transform:translateY(0)}
@@ -80,7 +79,6 @@ function toast(t){const m=$('#msg');m.textContent=t;m.style.display='block';clea
 const prod=id=>db.products.find(p=>p.id===id);
 const pname=p=>p?`${esc(p.name)} - ${esc(p.size)} - ${esc(p.color)}`:'(محذوف)';
 
-/* أسماء التبويبات مع أيقونات احترافية */
 const tabs={
   products:'📦 المنتجات',
   sale:'🛍️ بيع',
@@ -136,7 +134,6 @@ function custData(){
 const supOpts=v=>'<option value="">بدون مورد</option>'+db.suppliers.map(s=>`<option value="${s.id}"${s.id===v?' selected':''}>${esc(s.name)}</option>`).join('');
 const supName=id=>{const s=db.suppliers.find(x=>x.id===id);return s?esc(s.name):'-'};
 
-/* نظام البحث المتقدم عن المنتجات */
 const productMatches=(text)=>{
   const q=(text||'').trim().toLowerCase(); 
   if(q.length<1) return []; 
@@ -148,7 +145,7 @@ function renderProductSuggestions(form,query){
   if(!list) return; 
   const matches=productMatches(query); 
   if(!matches.length){list.innerHTML='<div class="empty">لا توجد منتجات مطابقة.</div>'; return;} 
-  list.innerHTML=matches.map(p=>`<div type="button" class="product-suggestion" onclick="fillProductFromSuggestion('${p.id}')">🏷️ <b>${esc(p.name)}</b> — مقاس: ${esc(p.size)} | لون: ${esc(p.color)} | الكود: <code>${esc(p.code)}</code> | المتبقي: <b>${p.qty}</b></div>`).join(''); 
+  list.innerHTML=matches.map(p=>`<div class="product-suggestion" onclick="fillProductFromSuggestion('${p.id}')">🏷️ <b>${esc(p.name)}</b> — مقاس: ${esc(p.size)} | لون: ${esc(p.color)} | الكود: <code>${esc(p.code)}</code> | المتبقي: <b>${p.qty}</b></div>`).join(''); 
 }
 
 const findP=(c,nm)=>{ 
@@ -264,7 +261,29 @@ const views={
   
   rep(){ return `<div class="card"><h3>📊 التقارير والإحصائيات</h3><p class="empty">✨ ستتوفر قريباً مع رسوم بيانية تفصيلية للمبيعات والأرباح.</p></div>`; },
   
-  acct(){ return `<div class="card"><h3>⚙️ إعدادات الحساب والنظام</h3><p>جميع البيانات تُخزن بشكل آمن في قاعدة بيانات Firebase وتعمل بسلاسة تامة حتى بدون إنترنت (Offline Mode).</p><button class="go" onclick="exportJ()" style="margin-top:10px">📥 تصدير نسخة احتياطية (JSON)</button></div>`;}
+  acct(){ 
+    return `
+      <div class="card">
+        <h3>⚙️ إعدادات الحساب والنظام</h3>
+        <p>جميع البيانات تُخزن بشكل آمن في قاعدة بيانات Firebase وتعمل بسلاسة تامة حتى بدون إنترنت (Offline Mode).</p>
+        
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <button class="go" onclick="exportJ()">📥 تصدير نسخة احتياطية (JSON)</button>
+          <button class="go" onclick="out()" style="background:linear-gradient(135deg, #7d5f6a 0%, #542a39 100%);">🚪 تسجيل الخروج</button>
+        </div>
+      </div>
+
+      <div class="card" style="border:1px solid #f2b4b4; background:#fff8f8;">
+        <h3 style="color:var(--bad)">⚠️ منطقة الخطر - إعادة ضبط البيانات</h3>
+        <p style="font-size:14px; color:#7a3030; margin-bottom:12px;">
+          تنبيه: هذا الخيار سيقوم بحذف <b>جميع البيانات المسجلة بالكامل</b> (المنتجات، المبيعات، المشتريات، الموردين، المصاريف، والديون) ولن يمكنك استعادتها بعد الحذف.
+        </p>
+        <button class="go" onclick="resetAllData()" style="background:linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); box-shadow:0 8px 18px rgba(192,57,43,0.3);">
+          🗑️ إعادة ضبط المسح الكلي للنظام
+        </button>
+      </div>
+    `;
+  }
 };
 
 const fail=x=>toast('تعذّر الحفظ: '+x.code);
@@ -349,13 +368,11 @@ const act={
     const nameVal = (f.name && f.name.value || '').trim();
     const codeVal = (f.code && f.code.value || '').trim();
     
-    // إذا قام بالكتابة في البحث أو الاسم أو الكود، نظهر الاقتراحات
     if(targetName === 'search' || targetName === 'name' || targetName === 'code') {
       const q = searchVal || nameVal || codeVal;
       renderProductSuggestions(f, q);
     }
     
-    // البحث عن المنتج وتعبئة البيانات تلقائياً
     const p = findP(codeVal, nameVal || searchVal);
     if(p){ 
       if(f.name && !f.name.value) f.name.value = p.name;
@@ -384,7 +401,41 @@ const act={
     if(pinfoEl) pinfoEl.innerHTML = `<div class="product-suggestion" style="cursor:default">✅ تم اختيار: <b>${esc(p.name)}</b> • مقاس: ${esc(p.size)} • لون: ${esc(p.color)} • <b>الكمية المتاحة: ${p.qty}</b></div>`;
   },
   
-  exportJ(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'})); a.download='Au-Clothing-Backup-'+today()+'.json'; a.click(); }
+  exportJ(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'})); a.download='Au-Clothing-Backup-'+today()+'.json'; a.click(); },
+
+  resetAllData(){
+    if(!confirm("⚠️ هل أنت متأكد تماماً من رغبتك في مسح كل شيء من النظام؟\nهذا الإجراء سيحذف كافة المنتجات والمبيعات والديون فوراً!")) return;
+    
+    const confirmText = prompt("لإتمام عملية الحذف النهائي، اكتب كلمة (حذف) أو (DELETE) في الخانة أدناه:");
+    if(!confirmText || (confirmText.trim() !== 'حذف' && confirmText.trim().toUpperCase() !== 'DELETE')){
+      return toast("❌ تم إلغاء عملية إعادة الضبط (لم يتم إدخال الكلمة الصحيحة)");
+    }
+
+    toast("⏳ جاري مسح جميع البيانات...");
+
+    const b = writeBatch(fs);
+    let totalDocs = 0;
+
+    NAMES.forEach(k => {
+      db[k].forEach(docItem => {
+        if(docItem.id){
+          b.delete(D(k, docItem.id));
+          totalDocs++;
+        }
+      });
+    });
+
+    if(totalDocs === 0){
+      return toast("النظام فارغ بالفعل، لا توجد بيانات لحذفها.");
+    }
+
+    b.commit().then(() => {
+      toast("✅ تم مسح جميع البيانات وإعادة ضبط النظام بنجاح!");
+      setTimeout(() => location.reload(), 1500);
+    }).catch(err => {
+      fail(err);
+    });
+  }
 };
 
 Object.assign(window,act);
