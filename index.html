@@ -82,7 +82,7 @@ const pname=p=>p?`${esc(p.name)} - ${esc(p.size)} - ${esc(p.color)}`:'(محذو�
 
 const tabs={
   products:'📦 المنتجات',
-  sale:'🛍️ بيع',
+  sale:'🛍️ بيع وسجل المبيعات',
   buy:'🛒 شراء',
   rs:'🔄 مرتجع وتبديل',
   jard:'📦 الجرد والمخزون',
@@ -94,12 +94,6 @@ const tabs={
 };
 
 function table(h,rows,empty){return rows.length?`<div class="tw"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.join('')}</table></div>`:`<div class="empty">${empty}</div>`}
-function debtValue(total,mode,manualDebt,paid){
-  if(mode!=='credit') return {paid:total,debt:0};
-  if(manualDebt>0) return {paid:Math.max(0,total-manualDebt),debt:manualDebt};
-  const p=Math.min(n(paid),total);
-  return {paid:p,debt:Math.max(0,total-p)};
-}
 
 function supplierDebtMap(){
   const map={};
@@ -181,7 +175,7 @@ const pc=p=>p.costUsd?p.costUsd*curRate():n(p.cost);
 const banner=()=>{const ok=db.rates.some(x=>x.date===today()),r=curRate();return `<div class="card"><form onsubmit="setRate(event)"><label>${ok?'💱 سعر صرف اليوم':'💱 أدخل سعر صرف اليوم'}<input name="r" type="number" step="0.001" value="${r||''}" required></label><button class="go">💾 حفظ الصرف</button></form></div>`};
 
 function render(){
-  $('#nav').innerHTML=uid?Object.entries(tabs).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${v}</button>`).join(''):'';
+  $('#nav').innerHTML=uid?Object.entries(tabs).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${v}.</button>`).join(''):'';
   if(!uid)return $('#app').innerHTML=views.login();
   if(!loaded)return $('#app').innerHTML='<div class="card empty">⏳ جارٍ تحميل البيانات...</div>';
   $('#app').innerHTML=banner()+views[tab]();
@@ -208,7 +202,7 @@ const views={
   },
   
   sale(){
-    const rows=db.sales.slice(-30).reverse().map(s=>{
+    const rows=db.sales.slice(-40).reverse().map(s=>{
       const totalVal = s.qty * s.price;
       const paidVal = n(s.paid);
       const costTotal = n(s.cost) * s.qty;
@@ -217,22 +211,20 @@ const views={
     });
     return `<div class="card"><h3>🛍️ فاتورة بيع جديدة</h3>
       <form onsubmit="addS(event)" oninput="slCalc(this,event)">
-        <div style="grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; background:#fff7fa; padding:12px; border-radius:10px; border:1px solid var(--line);">
-          <label>🏷️ اسم المنتج<input name="name" autocomplete="off" placeholder="اسم المنتج"></label>
-          <label>🔢 كود المنتج<input name="code" autocomplete="off" placeholder="كود المنتج"></label>
-        </div>
-        <label>السعر للقطعة<input name="price" type="number" step="0.01" placeholder="السعر"></label>
+        <label>🏷️ اسم المنتج<input name="name" autocomplete="off" placeholder="اسم المنتج"></label>
+        <label>🔢 كود المنتج<input name="code" autocomplete="off" placeholder="كود المنتج"></label>
+        <label>سعر القطعة (قابل للتعديل)<input name="price" type="number" step="0.01" placeholder="السعر"></label>
         <label>الكمية المباعة<input name="qty" type="number" min="1" step="1" value="1" placeholder="الكمية"></label>
-        <label>اسم الزبون<input name="cust" placeholder="اسم الزبون"></label>
         <label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل / دين</option></select></label>
-        <label>المدفوع نقداً<input name="paid" type="number" step="0.01" placeholder="المدفوع"></label>
-        <label>الدين المتبقي<input name="debt" type="number" step="0.01" placeholder="الدين"></label>
-        <button class="go">💾 إتمام وحفظ البيع</button>
+        <label>المبلغ المدفوع<input name="paid" type="number" step="0.01" placeholder="المدفوع نقداً"></label>
+        <label>اسم الزبون<input name="cust" placeholder="اسم الزبون"></label>
+        <label>المبلغ المتبقي (الدين)<input name="debt" type="number" step="0.01" placeholder="الدين المتبقي" readonly></label>
+        <button class="go" style="grid-column:1/-1">💾 إتمام وحفظ البيع</button>
       </form>
       <div id="productSearchList"></div>
       <div id="pinfo" style="margin-top:8px"></div>
     </div>
-    <div class="card"><h3>📋 سجل آخر المبيعات (مع التكلفة والربح)</h3>${table(['التاريخ','المنتج','الزبون','الكمية','الإجمالي','المدفوع الفعلي','التكلفة الإجمالية','الربح الصافي','الحالة'],rows,'لا توجد مبيعات مسجلة حتى الآن.')}</div>`;
+    <div class="card"><h3>📋 سجل المبيعات والعمليات</h3>${table(['التاريخ','المنتج / العملية','الزبون','الكمية','الإجمالي','المدفوع','التكلفة','الربح الصافي','الحالة'],rows,'لا توجد مبيعات مسجلة.')}</div>`;
   },
   
   buy(){
@@ -241,7 +233,6 @@ const views={
   },
   
   rs(){
-    const rows=db.returns.slice(-20).reverse().map(r=>`<tr><td>${r.date}</td><td><b>${pname(prod(r.pid))}</b></td><td>${r.type==='return'?'مرتجع':'تبديل بـ '+pname(prod(r.newPid))}</td><td>${r.qty}</td><td><span class="${r.amtDiff<0?'low':'ok'}">${fmt(r.amtDiff)}</span></td></tr>`);
     return `
       <div class="card">
         <h3>🔄 مرتجع أو تبديل منتج</h3>
@@ -251,21 +242,21 @@ const views={
         </div>
 
         ${rsType==='return'?`
-          <form onsubmit="addReturn(event)">
+          <form onsubmit="addReturn(event)" oninput="rsSearchInput(this)">
             <div style="grid-column:1/-1" class="box-highlight"><b>↩️ بيانات القطعة المرجعة:</b></div>
-            <label>كود أو اسم المنتج المرجع<input name="code" autocomplete="off" required placeholder="الكود أو الاسم" oninput="rsSearch(this)"></label>
+            <label>كود أو اسم المنتج المرجع<input name="code" autocomplete="off" required placeholder="الكود أو الاسم"></label>
             <label>الكمية المرجعة<input name="qty" type="number" min="1" value="1" required></label>
             <label>المبلغ المسترد للزبون<input name="amt" type="number" step="0.01" required placeholder="المبلغ المُعاد"></label>
-            <button class="go">💾 حفظ المرتجع وتعديل المخزون</button>
+            <button class="go" style="grid-column:1/-1">💾 حفظ المرتجع وإضافته للسجل</button>
           </form>
         `:`
-          <form onsubmit="addExchange(event)">
+          <form onsubmit="addExchange(event)" oninput="rsExSearchInput(this)">
             <div style="grid-column:1/-1" class="box-highlight"><b>↩️ 1. القطعة المرجعة (تُعاد للمخزون):</b></div>
-            <label>كود/اسم المنتج المرجع<input name="oldCode" autocomplete="off" required placeholder="كود/اسم المنتج"></label>
+            <label>كود أو اسم المنتج المرجع<input name="oldCode" autocomplete="off" required placeholder="كود أو اسم القطعة المرجعة"></label>
             <label>الكمية المرجعة<input name="oldQty" type="number" min="1" value="1" required></label>
 
             <div style="grid-column:1/-1" class="box-highlight"><b>🆕 2. القطعة الجديدة المستبدل بها (تُخصم من المخزون):</b></div>
-            <label>كود/اسم المنتج الجديد<input name="newCode" autocomplete="off" required placeholder="كود/اسم المنتج"></label>
+            <label>كود أو اسم المنتج الجديد<input name="newCode" autocomplete="off" required placeholder="كود أو اسم القطعة الجديدة"></label>
             <label>الكمية الجديدة<input name="newQty" type="number" min="1" value="1" required></label>
 
             <div style="grid-column:1/-1" class="box-highlight"><b>💵 3. التسوية المالية والتفاضل:</b></div>
@@ -274,12 +265,12 @@ const views={
             </label>
             <label>اسم الزبون<input name="cust" placeholder="اختياري"></label>
 
-            <button class="go">💾 إتمام عملية التبديل وتسجيلها</button>
+            <button class="go" style="grid-column:1/-1">💾 إتمام عملية التبديل وتسجيلها في المبيعات</button>
           </form>
         `}
+        <div id="productSearchList" style="margin-top:10px"></div>
         <div id="pinfo" style="margin-top:8px"></div>
       </div>
-      <div class="card"><h3>📋 سجل المرتجعات والتبديل</h3>${table(['التاريخ','المنتج المرجع','النوع','الكمية','الفرق المالي'],rows,'لا توجد عمليات سجلت.')}</div>
     `;
   },
 
@@ -518,11 +509,9 @@ const act={
     const cust=(f.cust.value||'').trim();
     if(q<1) return toast('الكمية يجب أن تكون أكثر من صفر');
     if(q>p.qty) return toast('⚠️ الكمية المتوفرة في المخزون هي '+p.qty+' فقط');
-    if(f.mode.value==='credit'&&!cust) return toast('اكتب اسم الزبون لتسجيل الدين الآجل');
     
-    const debtInfo = debtValue(total, f.mode.value, n(f.debt.value), n(f.paid.value));
-    const paid = f.mode.value==='cash' ? total : debtInfo.paid;
-    const debt = f.mode.value==='cash' ? 0 : debtInfo.debt;
+    const paid=n(f.paid.value);
+    const debt=n(f.debt.value);
 
     const currentCostLek = pc(p);
 
@@ -557,11 +546,14 @@ const act={
     const amt=n(f.amt.value);
     const b=writeBatch(fs);
     b.update(D('products',p.id),{qty:increment(q)});
-    put(b,'returns',{date:today(),pid:p.id,type:'return',qty:q,amtDiff:-amt});
-    put(b,'expenses',{date:today(),desc:'استرداد مرتجع: '+p.name,amt:amt});
+    
+    // تسجيل العملية في سجل المبيعات كحركة مرتجع
+    put(b,'sales',{date:today(),pid:p.id,qty:q,price:0,cost:pc(p),cust:'مرتجع',paid:-amt,debt:0,note:'إرجاع واسترداد نقدي'});
     b.commit().catch(fail);
-    toast('✅ تم تسجيل المرتجع وإعادة القطعة للمخزون');
+    
+    toast('✅ تم تسجيل المرتجع وإضافته لسجل المبيعات');
     e.target.reset();
+    const pinfoEl = $('#pinfo'); if(pinfoEl) pinfoEl.innerHTML = '';
   },
 
   addExchange(e){
@@ -583,17 +575,13 @@ const act={
     b.update(D('products',oldP.id),{qty:increment(oldQty)});
     b.update(D('products',newP.id),{qty:increment(-newQty)});
 
-    put(b,'returns',{date:today(),pid:oldP.id,newPid:newP.id,type:'exchange',qty:oldQty,amtDiff});
-    
-    if(amtDiff > 0){
-      put(b,'sales',{date:today(),pid:newP.id,qty:newQty,price:amtDiff/newQty,cost:pc(newP),cust,paid:amtDiff,debt:0,note:'تبديل - زيادة تحصيل'});
-    } else if(amtDiff < 0){
-      put(b,'expenses',{date:today(),desc:'تبديل منتج (فارق استرداد زبون)',amt:Math.abs(amtDiff)});
-    }
+    // تسجيل التبديل في سجل المبيعات كحركة رسمية
+    put(b,'sales',{date:today(),pid:newP.id,qty:newQty,price:newP.price,cost:pc(newP),cust:cust||'تبديل',paid:amtDiff>0?amtDiff:0,debt:0,note:`تبديل من (${oldP.name}) بـ (${newP.name})`});
 
     b.commit().catch(fail);
-    toast('✅ تم تنفيذ عملية التبديل وتحديث المخزون بنجاح');
+    toast('✅ تم تنفيذ عملية التبديل وإضافتها لسجل المبيعات بنجاح');
     e.target.reset();
+    const pinfoEl = $('#pinfo'); if(pinfoEl) pinfoEl.innerHTML = '';
   },
 
   setJardFilter(v){ jardFilter=v; render(); },
@@ -633,14 +621,35 @@ const act={
     if(p){ 
       if(f.name && !f.name.value) f.name.value = p.name;
       if(f.code && !f.code.value) f.code.value = p.code;
-      if(f.price) f.price.value = p.price; 
+      if(f.price && (!f.price.value || f.price.value == 0)) f.price.value = p.price; 
     }
+    
+    // حساب المتبقي تلقائياً
+    if(f.price && f.qty && f.paid && f.debt){
+      const total = n(f.price.value) * n(f.qty.value);
+      const paid = n(f.paid.value);
+      const remaining = Math.max(0, total - paid);
+      f.debt.value = remaining > 0 ? remaining : 0;
+    }
+
     const text = pinfo(codeVal, nameVal);
     $('#pinfo').innerHTML = text;
   },
 
-  rsSearch(el){
-    $('#pinfo').innerHTML = pinfo(el.value, el.value);
+  rsSearchInput(form){
+    const codeVal = form.code.value.trim();
+    const p = findP(codeVal, codeVal);
+    if(p){
+      $('#pinfo').innerHTML = `<div class="product-suggestion" style="cursor:default">✅ <b>${esc(p.name)}</b> • السعر الأصلي: ${p.price} • المخزون: ${p.qty}</div>`;
+    } else {
+      $('#pinfo').innerHTML = '';
+    }
+  },
+
+  rsExSearchInput(form){
+    const oldVal = form.oldCode.value.trim();
+    const newVal = form.newCode.value.trim();
+    $('#pinfo').innerHTML = pinfo(oldVal, oldVal) + (newVal ? pinfo(newVal, newVal) : '');
   },
 
   byCalc(f,e){ const p=findP(f.code.value,f.nm.value); if(p){ f.usd.value = p.costUsd || ''; } $('#pinfo').innerHTML=pinfo(f.code.value,f.nm.value); },
