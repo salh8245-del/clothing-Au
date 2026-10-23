@@ -8,50 +8,204 @@
 <link rel="icon" href="icon-192.png">
 <title>محاسبة Au Clothing</title>
 <style>
-:root{--bg:#fff5f8;--card:#fff;--ink:#2e1d26;--mute:#7d5f6a;--main:#f6b8cc;--main-2:#f2c3d4;--acc:#d96d95;--acc-2:#c44b7b;--line:#f4dfe8;--bad:#c0392b;--shadow:0 12px 28px rgba(189, 110, 142, 0.14);color-scheme:light}
-*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(circle at top,#fffafc 0%,var(--bg) 34%,#fef1f5 100%);color:var(--ink);font:16px/1.6 Tahoma,"Segoe UI",Arial,sans-serif}
-header{background:linear-gradient(135deg,var(--main) 0%,var(--main-2) 100%);padding:18px 20px;font-size:22px;font-weight:800;letter-spacing:.2px;color:#542a39;box-shadow:0 4px 14px rgba(214, 122, 156, 0.18)}
-nav{display:flex;overflow-x:auto;background:rgba(255,255,255,.82);border-bottom:1px solid var(--line);position:sticky;top:0;backdrop-filter:blur(8px);z-index:10}
-nav button{flex:1;min-width:92px;padding:12px 10px;border:0;background:transparent;color:var(--mute);font:inherit;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all .2s ease;font-weight:700}
-nav button:hover{background:#fff7fa;color:var(--ink)}
-nav button.on{color:#a33562;border-color:var(--acc);font-weight:800;background:linear-gradient(180deg,#fffafc 0%,#fff1f6 100%)}
-main{max-width:940px;margin:0 auto;padding:18px 14px 32px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
-h3{margin:0 0 12px;font-size:18px;color:#612d40}
-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
-label{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:5px}
-input,select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fffafc;color:var(--ink);font:inherit;width:100%;transition:border-color .15s ease, box-shadow .15s ease}
-input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(217,109,149,.12);outline:none}
-input[readonly]{background:#fff5f8}
-button.go{background:linear-gradient(135deg,var(--acc) 0%,var(--acc-2) 100%);color:#fff;border:none;border-radius:10px;padding:11px 18px;font:inherit;font-weight:800;cursor:pointer;align-self:end;box-shadow:0 10px 18px rgba(196,75,123,.22);transition:transform .15s ease, box-shadow .15s ease}
-button.go:hover{transform:translateY(-1px);box-shadow:0 12px 22px rgba(196,75,123,.26)}
-button.go:active{transform:translateY(0)}
-button.sm{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;cursor:pointer;transition:all .15s ease}
-button.sm:hover{background:#fff1f6;border-color:var(--acc);color:var(--acc)}
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--mute);font-weight:700}
-.low{color:var(--bad);font-weight:700}
-.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:var(--shadow)}
-.kpi b{display:block;font-size:22px}
-.kpi span{font-size:13px;color:var(--mute)}
-.net{border-right:5px solid var(--acc)!important}
-.empty{color:var(--mute);padding:8px 0;margin:0}
-#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(38,26,31,.96);color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:9;box-shadow:0 16px 28px rgba(43,25,35,.25)}
-#productSearchList{display:grid;gap:6px;margin:0 0 8px}
-.product-suggestion{padding:10px 12px;border:1px solid var(--line);background:#fffafc;border-radius:10px;cursor:pointer;text-align:right;color:var(--ink);font:inherit;transition:all .15s ease}
-.product-suggestion:hover{background:#ffeaf2;border-color:var(--acc);transform:translateY(-1px)}
-:focus-visible{outline:3px solid rgba(217,109,149,.35);outline-offset:2px}
+  :root{
+    --bg:#f7f2f7;
+    --bg-soft:#fdf1f7;
+    --panel:#ffffff;
+    --panel-alt:#fffafc;
+    --ink:#2e1d26;
+    --muted:#7d5f6a;
+    --main:#f6b8cc;
+    --main-2:#f2c3d4;
+    --acc:#d96d95;
+    --acc-2:#c44b7b;
+    --line:#f0dfe8;
+    --bad:#c0392b;
+    --good:#1f9e7a;
+    --shadow:0 18px 40px rgba(190, 113, 148, 0.13);
+    --radius:22px;
+    --radius-sm:14px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(circle at top, rgba(246,184,204,.22), transparent 30%),
+      linear-gradient(180deg, var(--bg) 0%, #f4edf2 100%);
+    color:var(--ink);
+    font:16px/1.6 Tahoma,"Segoe UI",Arial,sans-serif;
+    min-height:100vh;
+  }
+
+  .app-shell{
+    max-width:1280px;
+    margin:0 auto;
+    padding:18px 16px 30px;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    background:linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,245,249,.92));
+    border:1px solid rgba(217,109,149,.14);
+    border-radius:28px;
+    padding:18px 22px;
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(10px);
+    margin-bottom:18px;
+    position:sticky;
+    top:10px;
+    z-index:20;
+  }
+
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand-mark{
+    width:52px;height:52px;border-radius:18px;
+    display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--acc) 0%,var(--acc-2) 100%);
+    color:#fff;font-weight:900;font-size:1.35rem;
+    box-shadow:0 14px 24px rgba(196,75,123,.2);
+  }
+  .brand h1{margin:0; font-size:1.32rem; color:var(--ink)}
+  .brand small{display:block; color:var(--muted); font-size:.74rem; margin-top:2px}
+
+  .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{
+    border:none;border-radius:12px;padding:11px 16px;
+    background:#fff2f8;border:1px solid rgba(217,109,149,.16);
+    color:var(--acc-2);font:inherit;font-weight:800;cursor:pointer;
+    transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+  .pill:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(196,75,123,.08)}
+  .pill.primary{
+    background:linear-gradient(135deg,var(--acc) 0%,var(--acc-2) 100%);
+    color:#fff;border-color:transparent;box-shadow:0 12px 22px rgba(196,75,123,.22);
+  }
+
+  nav{
+    display:flex;gap:10px;overflow-x:auto;
+    padding:8px 8px 16px;margin:0 0 16px;
+    scrollbar-width:none;
+  }
+  nav::-webkit-scrollbar{display:none}
+  nav button{
+    flex:1 0 auto;min-width:110px;
+    padding:13px 16px;border:1px solid rgba(217,109,149,.12);
+    border-radius:16px;background:rgba(255,255,255,.72);
+    color:var(--muted);font:inherit;font-weight:800;
+    cursor:pointer;white-space:nowrap;transition:.18s ease;
+  }
+  nav button:hover{background:#fff7fa;color:var(--acc-2)}
+  nav button.on{
+    background:linear-gradient(180deg, rgba(246,184,204,.18), rgba(255,255,255,.9));
+    color:var(--acc-2);border-color:rgba(217,109,149,.26);
+    box-shadow: inset 0 0 0 1px rgba(217,109,149,.06);
+  }
+
+  main{display:grid;gap:18px}
+  .card{
+    background:var(--panel);border:1px solid rgba(217,109,149,.12);
+    border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);
+  }
+  .hero{
+    display:grid;grid-template-columns:1.2fr .8fr;gap:18px;
+  }
+  .hero-card{
+    background:linear-gradient(135deg, #fff 0%, #fff7fb 100%);
+    border:1px solid rgba(217,109,149,.1);
+    border-radius:26px;padding:24px;box-shadow:var(--shadow);
+  }
+  .hero-card h3{margin:0 0 12px;font-size:1.2rem;color:var(--ink)}
+  .hero-card p{margin:0;color:var(--muted);line-height:1.8;font-size:.95rem}
+
+  .kpi{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;margin-top:18px}
+  .kpi div{
+    background:linear-gradient(180deg,#fff 0%,#fff8fb 100%);
+    border:1px solid rgba(217,109,149,.12);border-radius:18px;padding:16px 14px;
+    box-shadow:0 12px 20px rgba(196,75,123,.04);
+  }
+  .kpi b{display:block;font-size:1.5rem;color:var(--acc-2);margin-bottom:4px}
+  .kpi span{font-size:.75rem;color:var(--muted)}
+
+  .rate-box{
+    background:linear-gradient(135deg, rgba(217,109,149,.14), rgba(124,79,141,.08));
+    border:1px solid rgba(217,109,149,.14);border-radius:26px;padding:22px;
+    display:flex;flex-direction:column;justify-content:center;gap:12px;
+  }
+  .rate-box .label{color:var(--muted);font-size:.8rem}
+  .rate-box .value{font-size:2rem;font-weight:900;color:var(--acc-2)}
+
+  form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:.8rem;font-weight:700}
+  input,select{
+    width:100%;padding:12px 14px;border:1px solid rgba(217,109,149,.18);background:#fffafc;
+    border-radius:12px;color:var(--ink);font:inherit;transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 4px rgba(217,109,149,.11);outline:none;background:#fff}
+  button.go{
+    align-self:end;border:none;border-radius:12px;padding:12px 18px;
+    background:linear-gradient(135deg,var(--acc) 0%,var(--acc-2) 100%);
+    color:#fff;font:inherit;font-weight:800;cursor:pointer;box-shadow:0 12px 22px rgba(196,75,123,.24);
+    min-height:48px;transition:transform .18s ease;
+  }
+  button.go:hover{transform:translateY(-1px)}
+  button.sm{padding:8px 12px;border-radius:10px;border:1px solid rgba(217,109,149,.18);background:#fff;color:var(--ink);cursor:pointer;transition:all .15s ease}
+  button.sm:hover{background:#fff1f7;border-color:var(--acc);color:var(--acc-2)}
+
+  .tw{overflow-x:auto;border:1px solid rgba(217,109,149,.12);border-radius:18px;background:linear-gradient(180deg,#fff,#fffafc)}
+  table{width:100%;border-collapse:collapse;min-width:700px}
+  th,td{padding:14px 12px;border-bottom:1px solid rgba(217,109,149,.12);text-align:right;white-space:nowrap}
+  th{background:#fff4f9;color:var(--muted);font-weight:800;font-size:.78rem}
+  tbody tr:hover{background:rgba(217,109,149,.025)}
+  .low{color:var(--bad);font-weight:800}
+  .empty{color:var(--muted);padding:10px 0;margin:0}
+  #msg{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(46,29,38,.96);color:#fff;padding:12px 18px;border-radius:12px;font-size:.86rem;display:none;box-shadow:0 16px 28px rgba(46,29,38,.24);z-index:50}
+
+  #productSearchList{display:grid;gap:8px;margin:0 0 8px}
+  .product-suggestion{background:#fffafc;border:1px solid rgba(217,109,149,.12);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:right;color:var(--ink);transition:all .18s ease}
+  .product-suggestion:hover{background:#fff1f7;border-color:rgba(217,109,149,.32);transform:translateY(-1px)}
+
+  :focus-visible{outline:3px solid rgba(217,109,149,.28);outline-offset:2px}
+
+  @media (max-width:860px){
+    .hero{grid-template-columns:1fr}
+    .kpi{grid-template-columns:repeat(2,minmax(120px,1fr))}
+    .topbar{flex-direction:column;align-items:flex-start}
+    .top-actions{width:100%}
+    .top-actions .pill{flex:1}
+  }
+
+  @media (max-width:540px){
+    .app-shell{padding:12px 12px 28px}
+    .card{padding:16px}
+    .kpi{grid-template-columns:1fr}
+    nav button{min-width:94px;padding:11px 12px}
+  }
 </style>
 </head>
 <body>
-<header>برنامج محاسبة لمحل Au Clothing</header>
-<nav id="nav"></nav>
-<main id="app"></main>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <h1>Au Clothing</h1>
+        <small>نظام إدارة المبيعات والمخزون</small>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="pill">التقارير</button>
+      <button class="pill primary">إضافة منتج</button>
+    </div>
+  </header>
+
+  <nav id="nav"></nav>
+  <main id="app"></main>
+</div>
 <div id="msg" role="status"></div>
+
 <script type="module">
 import {firebaseConfig} from "./firebase-config.js";
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -118,13 +272,13 @@ function custData(){
 }
 const supOpts=v=>'<option value="">بدون مورد</option>'+db.suppliers.map(s=>`<option value="${s.id}"${s.id===v?' selected':''}>${esc(s.name)}</option>`).join('');
 const supName=id=>{const s=db.suppliers.find(x=>x.id===id);return s?esc(s.name):'-'};
-const productMatches=(text)=>{const q=(text||'').trim().toLowerCase(); if(q.length<2) return []; return db.products.filter(p=>((p.code||'')+' '+(p.name||'')+' '+(p.size||'')+' '+(p.color||'')).toLowerCase().includes(q)).slice(0,8)};
-function renderProductSuggestions(form,query){ const list=$('#productSearchList'); if(!list) return; const matches=productMatches(query); if(!matches.length){list.innerHTML='<div class="empty">لا توجد نتائج.</div>'; return;} list.innerHTML=matches.map(p=>`<button type="button" class="product-suggestion" onclick="fillProductFromSuggestion('${p.id}')">${esc(p.name)} - ${esc(p.size)} - ${esc(p.color)} (${esc(p.code)})</button>`).join(''); }
-const findP=(c,nm)=>{ const q=(c||'').trim().toLowerCase(); const s=(nm||'').trim().toLowerCase(); const hits=[]; if(q) hits.push(...db.products.filter(p=>(p.code||'').toLowerCase()===q)); if(s) hits.push(...db.products.filter(p=>((p.name||'').toLowerCase()===s)||(p.name||'').toLowerCase().includes(s))); return hits[0]||null; };
-const pinfo=(c,nm)=>{ if(!(c||'').trim()&&!(nm||'').trim()) return ''; const q=(c||'').trim().toLowerCase(); const s=(nm||'').trim().toLowerCase(); const hits=[]; if(q) hits.push(...db.products.filter(p=>(p.code||'').toLowerCase()===q)); if(s) hits.push(...db.products.filter(p=>((p.name||'').toLowerCase()===s)||(p.name||'').toLowerCase().includes(s))); if(!hits.length) return '<div class="empty">لم يتم العثور على منتج.</div>'; const top=hits.slice(0,4); return top.map(p=>`<div class="product-suggestion" style="cursor:default">${esc(p.name)} • ${esc(p.size)} • ${esc(p.color)} • ${esc(p.code)} • الكمية: ${p.qty}</div>`).join(''); };
+const productMatches=(text)=>{const q=(text||'').trim().toLowerCase(); if(q.length<2) return []; return db.products.filter(p=>((p.code||'')+' '+(p.name||'')+' '+(p.size||'')+' '+(p.color||'')).toLowerCase().includes(q)).slice(0,6)};
+function renderProductSuggestions(form,query){ const list=$('#productSearchList'); if(!list) return; const matches=productMatches(query); if(!matches.length){list.innerHTML='<div class="empty">لا توجد نتائج</div>'; return;} list.innerHTML=matches.map(p=>`<div class="product-suggestion" data-id="${p.id}" onclick="fillProductFromSuggestion('${p.id}')">${esc(p.name)} - ${esc(p.size)} - ${esc(p.color)}</div>`).join(''); }
+const findP=(c,nm)=>{ const q=(c||'').trim().toLowerCase(); const s=(nm||'').trim().toLowerCase(); const hits=[]; if(q) hits.push(...db.products.filter(p=>(p.code||'').toLowerCase()===q)); if(s) hits.push(...db.products.filter(p=>(p.name||'').toLowerCase().includes(s) || (p.code||'').toLowerCase().includes(s))); return hits[0]||null; };
+const pinfo=(c,nm)=>{ if(!(c||'').trim()&&!(nm||'').trim()) return ''; const q=(c||'').trim().toLowerCase(); const s=(nm||'').trim().toLowerCase(); const hits=[]; if(q) hits.push(...db.products.filter(p=>(p.code||'').toLowerCase()===q)); if(s) hits.push(...db.products.filter(p=>(p.name||'').toLowerCase().includes(s) || (p.code||'').toLowerCase().includes(s))); const uniq=[...new Map(hits.map(p=>[p.id,p])).values()].slice(0,5); return uniq.length?`<div class="tw"><table><tr><th>المنتج</th><th>الكمية</th><th>السعر</th></tr>${uniq.map(p=>`<tr><td>${esc(p.name)} ${esc(p.size)} ${esc(p.color)}</td><td>${fmt(p.qty)}</td><td>${fmt(p.price)} $</td></tr>`).join('')}</table></div>`:''; };
 const curRate=()=>{const r=db.rates.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop();return r?n(r.rate):0};
 const pc=p=>p.costUsd?p.costUsd*curRate():n(p.cost);
-const banner=()=>{const ok=db.rates.some(x=>x.date===today()),r=curRate();return `<div class="card"><form onsubmit="setRate(event)"><label>${ok?'سعر صرف اليوم':'أدخل سعر صرف اليوم'}<input name="r" type="number" step="0.001" value="${r||''}" required></label><button class="go">حفظ</button></form></div>`};
+const banner=()=>{const ok=db.rates.some(x=>x.date===today()),r=curRate();return `<div class="card hero"><div class="hero-card"><h3>لوحة التحكم</h3><p>إدارة المخزون، المبيعات، المشتريات، الموردين، والديون بشكل سريع ومرتب مع واجهة حديثة وسهلة الاستخدام.</p><div class="kpi"><div><b>${fmt(db.products.length)}</b><span>إجمالي المنتجات</span></div><div><b>${fmt(db.sales.reduce((a,s)=>a+(Number(s.qty)||0),0))}</b><span>مبيعات اليوم</span></div><div><b>${fmt(db.purchases.reduce((a,s)=>a+(Number(s.qty)||0),0))}</b><span>المشتريات</span></div><div><b>${fmt(db.expenses.reduce((a,e)=>a+(Number(e.amt)||0),0))}</b><span>المصروفات</span></div></div></div><div class="rate-box"><div class="label">سعر صرف اليوم</div><div class="value">${fmt(r)} USD</div><button class="pill primary" type="button" onclick="setRateFromButton()">تحديث السعر</button></div></div>`;};
 function render(){
   $('#nav').innerHTML=uid?Object.entries(tabs).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${v}</button>`).join(''):'';
   if(!uid)return $('#app').innerHTML=views.login();
@@ -139,21 +293,21 @@ onAuthStateChanged(auth,u=>{
 const views={
   login(){return `<div class="card"><h3>تسجيل الدخول</h3><form onsubmit="login(event)"><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label><label>كلمة المرور<input name="pw" type="password" required autocomplete="current-password"></label><button class="go">دخول</button></form></div>`;},
   products(){
-    const rows=db.products.map(p=>{const c=pc(p); return `<tr><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.size)}</td><td>${esc(p.color)}</td><td>${supName(p.supId)}</td><td>${fmt(c)}</td><td>${fmt(p.price)}</td><td>${p.qty}</td><td><button class="sm" onclick="upP('${p.id}')">تحديث</button> <button class="sm" onclick="delP('${p.id}')">حذف</button></td></tr>`;});
-    return `<div class="card"><h3>إضافة منتج</h3><form onsubmit="addP(event)"><label>الكود<input name="code" required></label><label>اسم المنتج<input name="name" required></label><label>المقاس<input name="size"></label><label>اللون<input name="color"></label><label>المورد<select name="sid">${supOpts('')}</select></label><label>الكمية<input name="qty" type="number" min="1" required></label><label>السعر بالدولار<input name="usd" type="number" step="0.01"></label><label>الإجمالي<input name="tot" type="number" step="0.01"></label><label>سعر البيع<input name="price" type="number" step="0.01"></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المدفوع<input name="paid" type="number" step="0.01"></label><label>الدين يدويًا<input name="debt" type="number" step="0.01"></label><button class="go">إضافة</button></form></div><div class="card"><h3>المنتجات</h3>${table(['الكود','اسم المنتج','المقاس','اللون','المورد','التكلفة','سعر البيع','الكمية',''],rows,'لا توجد منتجات.')}</div>`;
+    const rows=db.products.map(p=>{const c=pc(p); return `<tr><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.size)}</td><td>${esc(p.color)}</td><td>${supName(p.supId)}</td><td>${fmt(c)} $</td><td><button class="sm" onclick="setCode('${p.id}')">تعديل الكود</button> <button class="sm" onclick="upP('${p.id}')">تعديل</button> <button class="sm" onclick="delP('${p.id}')">حذف</button></td></tr>`;});
+    return `<div class="card"><h3>إضافة منتج</h3><form onsubmit="addP(event)"><label>الكود<input name="code" required></label><label>اسم المنتج<input name="name" required></label><label>المقاس<input name="size"></label><label>اللون<input name="color"></label><label>المورد<select name="sid">${supOpts('')}</select></label><label>سعر القطعة بالدولار<input name="usd" type="number" step="0.01"></label><label>الكمية<input name="qty" type="number" min="1" required></label><label>السعر النهائي<input name="price" type="number" step="0.01"></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المبلغ المدفوع<input name="paid" type="number" step="0.01"></label><label>الدين يدويًا<input name="debt" type="number" step="0.01"></label><button class="go">إضافة المنتج</button></form></div><div class="card"><h3>المنتجات</h3>${table(['الكود','الاسم','المقاس','اللون','المورد','التكلفة',''],rows,'لا توجد منتجات.')}</div>`;
   },
   sale(){
-    const rows=db.sales.slice(-30).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}${s.swap?' (تبديل)':''}</td><td>${esc(s.cust||'-')}</td><td>${s.qty}</td><td>${fmt(s.qty*s.price)}</td></tr>`);
-    return `<div class="card"><h3>فاتورة بيع</h3><form onsubmit="addS(event)" oninput="slCalc(this,event)"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;grid-column:1/-1"><label>بحث المنتج<input name="search" autocomplete="off" placeholder="ابحث باسم المنتج أو الكود"></label></div><label>اسم المنتج<input name="name" autocomplete="off" placeholder="اسم المنتج"></label><label>كود المنتج<input name="code" autocomplete="off" placeholder="كود المنتج"></label><label>السعر<input name="price" type="number" step="0.01" placeholder="سعر القطعة"></label><label>الكمية<input name="qty" type="number" min="1" step="1" placeholder="الكمية"></label><label>اسم الزبون<input name="cust" placeholder="اسم الزبون"></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المدفوع<input name="paid" type="number" step="0.01" placeholder="المدفوع"></label><label>الدين<input name="debt" type="number" step="0.01" placeholder="الدين"></label><button class="go">حفظ البيع</button></form><div id="productSearchList"></div><div id="pinfo"></div></div><div class="card"><h3>آخر المبيعات</h3>${table(['التاريخ','المنتج','الزبون','الكمية','الإجمالي'],rows,'لا توجد مبيعات بعد.')}</div>`;
+    const rows=db.sales.slice(-20).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}${s.swap?' (تبديل)':''}</td><td>${esc(s.cust||'-')}</td><td>${s.qty}</td><td>${fmt(s.qty*s.price)}</td><td>${fmt(Number(s.paid)||0)}</td><td>${fmt(Number(s.debt)||0)}</td></tr>`);
+    return `<div class="card"><h3>فاتورة بيع</h3><form onsubmit="addS(event)" oninput="slCalc(this,event)"><label>بحث المنتج أو الكود<input name="search" autocomplete="off"></label><div id="productSearchList"></div><label>الكود<input name="code" autocomplete="off"></label><label>اسم المنتج<input name="name" autocomplete="off"></label><label>السعر<input name="price" type="number" step="0.01"></label><label>الكمية<input name="qty" type="number" min="1" required></label><label>اسم الزبون<input name="cust"></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المبلغ المدفوع<input name="paid" type="number" step="0.01"></label><label>الدين يدويًا<input name="debt" type="number" step="0.01"></label><div id="pinfo"></div><button class="go">حفظ الفاتورة</button></form></div><div class="card"><h3>آخر المبيعات</h3>${table(['التاريخ','المنتج','الزبون','الكمية','الإجمالي','المدفوع','الدين'],rows,'لا توجد مبيعات.')}</div>`;
   },
   buy(){
-    const rows=db.purchases.filter(p=>p.sid!==undefined).slice(-30).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}</td><td>${supName(s.sid)}</td><td>${s.qty}</td><td>${fmt(s.costUsd||0)}</td><td>${fmt(s.paid||0)}</td><td>${fmt(s.debt||0)}</td></tr>`);
-    return `<div class="card"><h3>فاتورة شراء</h3><form onsubmit="addB(event)" oninput="byCalc(this,event)"><label>كود المنتج<input name="code" autocomplete="off"></label><label>اسم المنتج<input name="nm" autocomplete="off"></label><label>المورد<select name="sid">${supOpts('')}</select></label><label>الكمية<input name="qty" type="number" min="1" step="1"></label><label>السعر بالدولار<input name="usd" type="number" step="0.01"></label><label>الإجمالي<input name="tot" type="number" step="0.01"></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المدفوع<input name="paid" type="number" step="0.01"></label><label>الدين<input name="debt" type="number" step="0.01"></label><button class="go">حفظ الشراء</button></form><div id="pinfo"></div></div><div class="card"><h3>آخر الشراء</h3>${table(['التاريخ','المنتج','المورد','الكمية','التكلفة','المدفوع','الدين'],rows,'لا توجد مشتريات بعد.')}</div>`;
+    const rows=db.purchases.filter(p=>p.sid!==undefined).slice(-20).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}</td><td>${supName(s.sid)}</td><td>${s.qty}</td><td>${fmt(Number(s.costUsd)||0)}</td><td>${fmt(Number(s.paid)||0)}</td><td>${fmt(Number(s.debt)||0)}</td></tr>`);
+    return `<div class="card"><h3>فاتورة شراء</h3><form onsubmit="addB(event)" oninput="byCalc(this,event)"><label>الكود<input name="code" autocomplete="off"></label><label>اسم المنتج<input name="nm" autocomplete="off"></label><label>المورد<select name="sid">${supOpts('')}</select></label><label>السعر الإجمالي<input name="tot" type="number" step="0.01"></label><label>السعر لكل وحدة<input name="usd" type="number" step="0.01"></label><label>الكمية<input name="qty" type="number" min="1" required></label><label>نوع الدفع<select name="mode"><option value="cash">نقدي</option><option value="credit">آجل</option></select></label><label>المبلغ المدفوع<input name="paid" type="number" step="0.01"></label><label>الدين يدويًا<input name="debt" type="number" step="0.01"></label><div id="pinfo"></div><button class="go">حفظ الشراء</button></form></div><div class="card"><h3>آخر المشتريات</h3>${table(['التاريخ','المنتج','المورد','الكمية','التكلفة','المدفوع','الدين'],rows,'لا توجد مشتريات.')}</div>`;
   },
   rs(){ return `<div class="card"><h3>المرتجع والتبديل</h3><p class="empty">سيتم تفعيل هذه الصفحة لاحقاً إذا رغبت.</p></div>`; },
   sup(){
     const debtMap=supplierDebtMap();
-    const rows=db.suppliers.map(s=>{ const d=(debtMap[s.id]?.due||0) - (debtMap[s.id]?.pay||0); return `<tr><td>${esc(s.name)}</td><td class="${d>0.005?'low':''}">${fmt(d)} $</td><td><button class="sm" onclick="setSup('${s.id}')">تفاصيل</button> <button class="sm" onclick="paySup('${s.id}')">دفع</button></td></tr>`;});
+    const rows=db.suppliers.map(s=>{ const d=(debtMap[s.id]?.due||0) - (debtMap[s.id]?.pay||0); return `<tr><td>${esc(s.name)}</td><td class="${d>0.005?'low':''}">${fmt(d)} $</td><td><button class="sm" onclick="paySup('${s.id}')">تسديد</button> <button class="sm" onclick="setSup('${s.id}')">تفاصيل</button></td></tr>`;});
     let det='';
     if(selSup){
       const sp=db.suppliers.find(x=>x.id===selSup);
@@ -161,36 +315,41 @@ const views={
         const d=(debtMap[sp.id]?.due||0) - (debtMap[sp.id]?.pay||0);
         const invs=db.purchases.filter(p=>p.sid===sp.id).slice(-20).reverse().map(p=>`<tr><td>${p.date}</td><td>${pname(prod(p.pid))}</td><td>${p.qty}</td><td>${fmt(Number(p.debt)||0)}</td><td>${fmt(Number(p.paid)||0)}</td></tr>`);
         const pays=db.spay.filter(x=>x.sid===sp.id).slice(-15).reverse().map(x=>`<tr><td>${x.date}</td><td>${fmt(Number(x.amt)||0)} $</td></tr>`);
-        det=`<div class="card"><h3>${esc(sp.name)} — الدين: ${fmt(d)} $</h3>${table(['التاريخ','المنتج','الكمية','الدين','المدفوع'],invs,'')}</div><div class="card"><h3>دفعات المورد</h3>${table(['التاريخ','المبلغ'],pays,'لا توجد دفعات.')}</div>`;
+        det=`<div class="card"><h3>${esc(sp.name)} — الدين: ${fmt(d)} $</h3>${table(['التاريخ','المنتج','الكمية','الدين','المدفوع'],invs,'')}</div><div class="card"><h3>الدفعات</h3>${table(['التاريخ','المبلغ'],pays,'لا توجد دفعات.')}</div>`;
       }
     }
-    return `<div class="card"><h3>إضافة مورد</h3><form onsubmit="addSup(event)"><label>اسم المورد<input name="name" required></label><button class="go">إضافة</button></form></div><div class="card"><h3>الموردون</h3>${table(['اسم المورد','الرصيد',''],rows,'لا توجد موردين.')}</div>${det}`;
+    return `<div class="card"><h3>إضافة مورد</h3><form onsubmit="addSup(event)"><label>اسم المورد<input name="name" required></label><button class="go">إضافة</button></form></div><div class="card"><h3>الموردين</h3>${table(['اسم المورد','الرصيد',''],rows,'لا توجد موردين.')}</div>${det}`;
   },
   exp(){
-    const rows=db.expenses.slice(-30).reverse().map(e=>`<tr><td>${e.date}</td><td>${esc(e.desc)}</td><td>${fmt(e.amt)}</td><td><button class="sm" onclick="delE('${e.id}')">حذف</button></td></tr>`);
-    return `<div class="card"><h3>تسجيل مصروف</h3><form onsubmit="addE(event)"><label>التاريخ<input name="date" type="date" value="${today()}"></label><label>البند (إيجار/رواتب/أخرى)<input name="desc" required></label><label>المبلغ<input name="amt" type="number" step="0.01" required></label><button class="go">حفظ المصروف</button></form></div><div class="card"><h3>المصروفات</h3>${table(['التاريخ','البند','المبلغ',''],rows,'لا توجد مصاريف.')}</div>`;
+    const rows=db.expenses.slice(-20).reverse().map(e=>`<tr><td>${e.date}</td><td>${esc(e.desc)}</td><td>${fmt(e.amt)}</td><td><button class="sm" onclick="delE('${e.id}')">حذف</button></td></tr>`);
+    return `<div class="card"><h3>تسجيل مصروف</h3><form onsubmit="addE(event)"><label>التاريخ<input name="date" type="date" value="${today()}"></label><label>البند (إيجابي/سالب)<input name="desc" required></label><label>المبلغ<input name="amt" type="number" step="0.01" required></label><button class="go">حفظ المصروف</button></form></div><div class="card"><h3>المصاريف</h3>${table(['التاريخ','البند','المبلغ',''],rows,'لا توجد مصروفات.')}</div>`;
   },
   debt(){
     const C=custData();
     const names=Object.keys(C).filter(c=>C[c].rem>0.005);
-    const rows=names.map(c=>`<tr><td>${esc(c)}</td><td class="low">${fmt(C[c].rem)}</td><td><button class="sm" onclick="setCust(${JSON.stringify(c).replace(/"/g,'&quot;')})">تفاصيل</button></td></tr>`);
+    const rows=names.map(c=>`<tr><td>${esc(c)}</td><td class="low">${fmt(C[c].rem)}</td><td><button class="sm" onclick="setCust('${esc(c).replace(/'/g,"\\'")}')">تفاصيل</button></td></tr>`);
     let det='';
     const cd=C[selCust];
     if(cd){
       const payRows=db.pay.filter(p=>p.cust===selCust).slice(-15).reverse().map(p=>`<tr><td>${p.date}</td><td>${fmt(Number(p.amt)||0)}</td><td>${p.kind==='debt'?'دين إضافي':'دفعة'}</td></tr>`);
-      const invRows=cd.inv.slice(-20).reverse().map(i=>`<tr><td>${i.date}</td><td>${pname(prod(i.pid))}</td><td>${fmt(Number(i.qty||0) * Number(i.price||0))}</td><td>${fmt(Number(i.debt)>0 ? Number(i.debt) : (Number(i.qty||0) * Number(i.price||0) - Number(i.paid||0)) )}</td></tr>`);
-      det=`<div class="card"><h3>${esc(selCust)} — المتبقي: ${fmt(cd.rem)}</h3>${table(['تاريخ الفاتورة','المنتج','القيمة','الدين'],invRows,'')}</div><div class="card"><h3>دفعات الزبون</h3>${table(['التاريخ','المبلغ','النوع'],payRows,'لا توجد دفعات.')}</div>`;
+      const invRows=cd.inv.slice(-20).reverse().map(i=>`<tr><td>${i.date}</td><td>${pname(prod(i.pid))}</td><td>${fmt(Number(i.qty||0) * Number(i.price||0))}</td><td>${fmt(Number(i.debt)>0 ? Number(i.debt) : 0)}</td></tr>`);
+      det=`<div class="card"><h3>${esc(selCust)} — المتبقي: ${fmt(cd.rem)}</h3>${table(['تاريخ الفاتورة','المنتج','القيمة','الدين'],invRows,'')}</div><div class="card"><h3>دفعات العميل</h3>${table(['التاريخ','المبلغ','النوع'],payRows,'لا توجد دفعات.')}</div>`;
     }
     return `<div class="card"><h3>ديون الزبائن</h3>${table(['الزبون','المتبقي',''],rows,'لا توجد ديون.')}</div>${det}`;
   },
   rep(){ return `<div class="card"><h3>التقارير</h3><p class="empty">قريباً</p></div>`; },
-  acct(){ return `<div class="card"><h3>الحساب</h3><p>البيانات تُخزن في Firebase وتدعم العمل بدون إنترنت.</p></div>`;}
+  acct(){ return `<div class="card"><h3>الحساب</h3><p>البيانات تُخزن في Firebase وتدعم العمل بدون إنترنت.</p></div>`; }
 };
 const fail=x=>toast('تعذّر الحفظ: '+x.code);
 const act={
   go(k){tab=k;render();},
+  setRateFromButton(){
+    const rate = prompt('أدخل سعر الصرف اليوم:', curRate() || '');
+    if(rate===null) return;
+    const b=writeBatch(fs); put(b,'rates',{date:today(),rate:n(rate)}); b.commit().catch(fail); toast('تم حفظ سعر الصرف');
+  },
   setRate(e){e.preventDefault(); const b=writeBatch(fs); put(b,'rates',{date:today(),rate:n(e.target.elements.r.value)}); b.commit().catch(fail); toast('تم حفظ سعر الصرف'); },
-  login(e){e.preventDefault(); const f=e.target.elements; signInWithEmailAndPassword(auth,f.email.value.trim(),f.pw.value).catch(()=>toast('بيانات الدخول غير صحيحة أو لا توجد صلاحية')); },
+  login(e){e.preventDefault(); const f=e.target.elements; signInWithEmailAndPassword(auth,f.email.value.trim(),f.pw.value).catch(()=>toast('بيانات الدخول غير صحيحة أو لا توجد حسابات')); },
   out(){signOut(auth);},
   addP(e){
     e.preventDefault();
@@ -217,7 +376,7 @@ const act={
   },
   setCode(id){ const c=(prompt('الكود الجديد')||'').trim(); if(!c) return; if(db.products.some(p=>(p.code||'').toLowerCase()===c.toLowerCase())) return toast('الكود مستخدم'); const b=writeBatch(fs); b.update(D('products',id),{code:c}); b.commit(); },
   delP(id){ const p=prod(id); if(!confirm('حذف '+p.name+'؟')) return; const b=writeBatch(fs); b.delete(D('products',id)); b.commit(); },
-  upP(id){ const p=prod(id); if(!p) return; const newName=prompt('اسم المنتج الجديد',p.name); if(newName===null) return; const b=writeBatch(fs); b.update(D('products',id),{name:newName.trim()||p.name}); b.commit(); },
+  upP(id){ const p=prod(id); if(!p) return; const newName=prompt('اسم المنتج الجديد',p.name); if(newName===null) return; const b=writeBatch(fs); b.update(D('products',id),{name:newName.trim()}); b.commit(); },
   addS(e){
     e.preventDefault();
     const f=e.target.elements;
@@ -230,7 +389,7 @@ const act={
     const debtInfo = debtValue(total, f.mode.value, n(f.debt.value), n(f.paid.value));
     const paid = f.mode.value==='cash' ? total : debtInfo.paid;
     const debt = f.mode.value==='cash' ? 0 : debtInfo.debt;
-    const b=writeBatch(fs); b.update(D('products',p.id),{qty:increment(-q)}); put(b,'sales',{date:today(),pid:p.id,qty:q,price:price,list:p.price,cost:pc(p),cust,paid,debt}); b.commit().catch(fail); toast('تم حفظ البيع'); e.target.reset();
+    const b=writeBatch(fs); b.update(D('products',p.id),{qty:increment(-q)}); put(b,'sales',{date:today(),pid:p.id,qty:q,price:price,list:p.price,cost:pc(p),cust,paid,debt}); b.commit().catch(fail); toast('تم حفظ الفاتورة'); e.target.reset();
   },
   addB(e){
     e.preventDefault();
@@ -245,7 +404,7 @@ const act={
   addSup(e){ e.preventDefault(); const b=writeBatch(fs); put(b,'suppliers',{name:e.target.elements.name.value.trim()}); b.commit().catch(fail); toast('تمت إضافة المورد'); e.target.reset(); },
   paySup(id){ const v=n(prompt('مبلغ الدفعة بالدولار')); if(v<=0) return; const b=writeBatch(fs); put(b,'spay',{date:today(),sid:id,amt:v}); b.commit(); toast('تم تسجيل الدفعة'); },
   setCust(c){selCust=c; render();},
-  addCustDebt(e){ e.preventDefault(); const f=e.target.elements; const cust=(f.cust.value||'').trim(); const amt=n(f.amt.value); if(!cust||amt<=0) return toast('اكتب اسم الزبون ومبلغ الدين'); const b=writeBatch(fs); put(b,'pay',{date:today(),cust,amt,kind:'debt'}); b.commit().catch(fail); toast('تمت إضافة دين الزبون'); e.target.reset(); },
+  addCustDebt(e){ e.preventDefault(); const f=e.target.elements; const cust=(f.cust.value||'').trim(); const amt=n(f.amt.value); if(!cust||amt<=0) return toast('اكتب اسم الزبون ومبلغ الدين'); const b=writeBatch(fs); put(b,'pay',{date:today(),cust,amt,kind:'debt'}); b.commit().catch(fail); toast('تم تسجيل دين الزبون'); e.target.reset(); },
   addE(e){ e.preventDefault(); const f=e.target.elements; const b=writeBatch(fs); put(b,'expenses',{date:f.date.value||today(),desc:f.desc.value.trim(),amt:n(f.amt.value)}); b.commit().catch(fail); toast('تم حفظ المصروف'); e.target.reset(); },
   delE(id){ if(!confirm('حذف هذا المصروف؟')) return; const b=writeBatch(fs); b.delete(D('expenses',id)); b.commit(); },
   slCalc(f,e){
@@ -260,7 +419,7 @@ const act={
   setRm(v){rmMode=v; render();},
   setRep(v){repMode=v; render();},
   setSup(v){selSup=v; render();},
-  fillProductFromSuggestion(id){ const p=db.products.find(x=>x.id===id); if(!p) return; const form=document.querySelector('form[onsubmit="addS(event)"]'); if(!form) return; form.name.value=p.name; form.code.value=p.code; form.price.value=p.price; form.search.value=p.name; renderProductSuggestions(form,p.name); },
+  fillProductFromSuggestion(id){ const p=db.products.find(x=>x.id===id); if(!p) return; const form=document.querySelector('form[onsubmit="addS(event)"]'); if(!form) return; form.name.value=p.name; form.code.value=p.code; form.price.value=p.price; const list=$('#productSearchList'); if(list) list.innerHTML=''; },
   exportJ(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'})); a.download='backup-'+today()+'.json'; a.click(); }
 };
 Object.assign(window,act);
