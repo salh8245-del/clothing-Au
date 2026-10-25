@@ -1,0 +1,18 @@
+ put(b,'sales',{date:today(),pid:p.id,qty:q,price:pr,cost:p.cost,cust,paid});
+ b.commit().catch(x=>toast('تعذّر الحفظ: '+x.code));toast('تم البيع: '+fmt(tot))},
+addB(e){e.preventDefault();const f=e.target.elements,p=prod(f.pid.value),q=Math.floor(n(f.qty.value)),c=n(f.cost.value),b=writeBatch(fs);
+ b.update(D('products',p.id),{qty:increment(q),cost:c});
+ put(b,'purchases',{date:today(),pid:p.id,qty:q,cost:c});
+ b.commit().catch(x=>toast('تعذّر الحفظ: '+x.code));toast('تم تسجيل الشراء')},
+addE(e){e.preventDefault();const f=e.target.elements,b=writeBatch(fs);
+ put(b,'expenses',{date:f.date.value||today(),desc:f.desc.value.trim(),amt:n(f.amt.value)});
+ b.commit().catch(x=>toast('تعذّر الحفظ: '+x.code));toast('تم حفظ المصروف')},
+delE(id){if(!confirm('حذف هذا المصروف؟'))return;const b=writeBatch(fs);b.delete(D('expenses',id));b.commit()},
+payD(c){const v=n(prompt('مبلغ الدفعة من '+c));if(v<=0)return;const b=writeBatch(fs);put(b,'pay',{date:today(),cust:c,amt:v});b.commit();toast('تم تسجيل الدفعة')},
+exportJ(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='backup-'+today()+'.json';a.click()}
+};
+Object.assign(window,act);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
