@@ -1,3 +1,158 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#243b5a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>محاسبة متجر الألبسة</title>
+<style>
+:root{--bg:#eef1f5;--card:#fff;--ink:#1c2733;--mute:#6b7785;--main:#243b5a;--acc:#e8c547;--line:#d9dfe7;--bad:#b3392f}
+@media (prefers-color-scheme:dark){:root{--bg:#141b24;--card:#1e2833;--ink:#e8edf2;--mute:#93a0ad;--main:#7fa6d6;--line:#33414f;--bad:#e8776d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Tahoma,"Segoe UI",Arial,sans-serif}
+header{background:var(--main);color:#fff;padding:14px 16px;font-size:20px;font-weight:700}
+@media (prefers-color-scheme:dark){header,button.go{color:#141b24!important}}
+nav{display:flex;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0}
+nav button{flex:1;min-width:84px;padding:12px 8px;border:0;background:none;color:var(--mute);font:inherit;cursor:pointer;border-bottom:3px solid transparent}
+nav button.on{color:var(--main);border-color:var(--acc);font-weight:700}
+main{max-width:820px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+h3{margin:0 0 10px;font-size:17px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+label{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:3px}
+input,select{padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;width:100%}
+button.go{background:var(--main);color:#fff;border:0;border-radius:6px;padding:10px;font:inherit;font-weight:700;cursor:pointer;align-self:end}
+button.sm{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 9px;font:inherit;font-size:13px;cursor:pointer}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:600}
+.low{color:var(--bad);font-weight:700}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}
+.kpi b{display:block;font-size:22px}
+.kpi span{font-size:13px;color:var(--mute)}
+.net{border-right:5px solid var(--acc)!important}
+.empty{color:var(--mute);padding:8px 0}
+#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;display:none;z-index:9}
+:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+</style>
+</head>
+<body>
+<header>محاسبة متجر الألبسة</header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<div id="msg" role="status"></div>
+<script type="module">
+import {firebaseConfig} from "./firebase-config.js";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,onSnapshot,writeBatch,increment} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const app=initializeApp(firebaseConfig);
+const fs=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+const auth=getAuth(app);
+const NAMES=['products','sales','purchases','expenses','pay'];
+let uid=null,unsubs=[],loaded=false,tab='products',tab_m='';
+let db={products:[],sales:[],purchases:[],expenses:[],pay:[]};
+const C=k=>collection(fs,'stores',uid,k);
+const D=(k,id)=>doc(fs,'stores',uid,k,id);
+const put=(b,k,o)=>b.set(doc(C(k)),{...o,ts:Date.now()});
+const $=s=>document.querySelector(s);
+const today=()=>new Date().toISOString().slice(0,10);
+const n=v=>Number(v)||0;
+const fmt=v=>n(v).toLocaleString('en-US',{maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(t){const m=$('#msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',2500)}
+const prod=id=>db.products.find(p=>p.id===id);
+const pname=p=>p?`${esc(p.name)} - ${esc(p.size)} - ${esc(p.color)}`:'(محذوف)';
+const popts=()=>db.products.map(p=>`<option value="${p.id}">${pname(p)} (${p.qty})</option>`).join('');
+const tabs={products:'المنتجات',sale:'بيع',buy:'شراء',exp:'المصاريف',debt:'الديون',rep:'التقرير',acct:'الحساب'};
+function table(h,rows,empty){return rows.length?`<div class="tw"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.join('')}</table></div>`:`<div class="empty">${empty}</div>`}
+
+onAuthStateChanged(auth,u=>{
+  unsubs.forEach(f=>f());unsubs=[];loaded=false;
+  if(u){uid=u.uid;let got=0;
+    NAMES.forEach(k=>unsubs.push(onSnapshot(C(k),s=>{
+      db[k]=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.ts||0)-(b.ts||0));
+      if(++got>=NAMES.length)loaded=true;
+      if(loaded)render()
+    },e=>toast('خطأ في القراءة: '+e.code))));
+  }else{uid=null;db={products:[],sales:[],purchases:[],expenses:[],pay:[]}}
+  render();
+});
+
+function render(){
+  $('#nav').innerHTML=uid?Object.entries(tabs).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${v}</button>`).join(''):'';
+  if(!uid)return $('#app').innerHTML=views.login();
+  if(!loaded)return $('#app').innerHTML='<div class="card empty">جارٍ تحميل البيانات...</div>';
+  $('#app').innerHTML=views[tab]();
+}
+
+const views={
+login(){return `<div class="card"><h3>تسجيل الدخول</h3><form onsubmit="login(event)"><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="username"></label><label>كلمة المرور<input name="pw" type="password" required autocomplete="current-password"></label><button class="go">دخول</button></form></div>`},
+products(){
+ const rows=db.products.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.size)}</td><td>${esc(p.color)}</td><td>${fmt(p.cost)}</td><td>${fmt(p.price)}</td><td class="${p.qty<=2?'low':''}">${p.qty}</td><td><button class="sm" onclick="delP('${p.id}')">حذف</button></td></tr>`);
+ return `<div class="card"><h3>إضافة منتج</h3><form onsubmit="addP(event)">
+ <label>الاسم<input name="name" required></label><label>المقاس<input name="size"></label><label>اللون<input name="color"></label>
+ <label>سعر الشراء<input name="cost" type="number" step="any" min="0" required></label><label>سعر البيع<input name="price" type="number" step="any" min="0" required></label>
+ <label>الكمية الحالية<input name="qty" type="number" min="0" value="0"></label><button class="go">إضافة المنتج</button></form></div>
+ <div class="card"><h3>المخزون (${db.products.length})</h3>${table(['الاسم','المقاس','اللون','الشراء','البيع','الكمية',''],rows,'لا توجد منتجات بعد. أضف أول منتج من النموذج أعلاه.')}</div>`},
+sale(){
+ const rows=db.sales.slice(-30).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}</td><td>${s.qty}</td><td>${fmt(s.qty*s.price)}</td><td>${esc(s.cust)}</td><td>${fmt(s.paid)}</td></tr>`);
+ return `<div class="card"><h3>فاتورة بيع</h3>${db.products.length?`<form onsubmit="addS(event)">
+ <label>المنتج<select name="pid" onchange="this.form.price.value=prod(this.value).price">${popts()}</select></label>
+ <label>الكمية<input name="qty" type="number" min="1" value="1" required></label>
+ <label>سعر القطعة<input name="price" type="number" step="any" min="0" value="${db.products[0].price}" required></label>
+ <label>الزبون (للدين فقط)<input name="cust"></label>
+ <label>المدفوع (فارغ = كامل)<input name="paid" type="number" step="any" min="0"></label><button class="go">تسجيل البيع</button></form>`:'<div class="empty">أضف منتجات أولاً.</div>'}</div>
+ <div class="card"><h3>آخر المبيعات</h3>${table(['التاريخ','المنتج','الكمية','الإجمالي','الزبون','المدفوع'],rows,'لا توجد مبيعات بعد.')}</div>`},
+buy(){
+ const rows=db.purchases.slice(-30).reverse().map(s=>`<tr><td>${s.date}</td><td>${pname(prod(s.pid))}</td><td>${s.qty}</td><td>${fmt(s.cost)}</td><td>${fmt(s.qty*s.cost)}</td></tr>`);
+ return `<div class="card"><h3>فاتورة شراء</h3>${db.products.length?`<form onsubmit="addB(event)">
+ <label>المنتج<select name="pid" onchange="this.form.cost.value=prod(this.value).cost">${popts()}</select></label>
+ <label>الكمية<input name="qty" type="number" min="1" value="1" required></label>
+ <label>سعر الشراء للقطعة<input name="cost" type="number" step="any" min="0" value="${db.products[0].cost}" required></label><button class="go">تسجيل الشراء</button></form>`:'<div class="empty">أضف منتجات أولاً.</div>'}</div>
+ <div class="card"><h3>آخر المشتريات</h3>${table(['التاريخ','المنتج','الكمية','سعر القطعة','الإجمالي'],rows,'لا توجد مشتريات بعد.')}</div>`},
+exp(){
+ const rows=db.expenses.slice(-30).reverse().map(e=>`<tr><td>${e.date}</td><td>${esc(e.desc)}</td><td>${fmt(e.amt)}</td><td><button class="sm" onclick="delE('${e.id}')">حذف</button></td></tr>`);
+ return `<div class="card"><h3>تسجيل مصروف</h3><form onsubmit="addE(event)">
+ <label>البند (إيجار، كهرباء، راتب...)<input name="desc" required></label><label>المبلغ<input name="amt" type="number" step="any" min="0" required></label><label>التاريخ<input name="date" type="date" value="${today()}"></label><button class="go">حفظ المصروف</button></form></div>
+ <div class="card"><h3>آخر المصاريف</h3>${table(['التاريخ','البند','المبلغ',''],rows,'لا توجد مصاريف بعد.')}</div>`},
+debt(){
+ const b={};db.sales.forEach(s=>{if(s.cust)b[s.cust]=(b[s.cust]||0)+s.qty*s.price-s.paid});
+ db.pay.forEach(p=>{b[p.cust]=(b[p.cust]||0)-p.amt});
+ const rows=Object.entries(b).filter(([,v])=>v>0.005).map(([c,v])=>`<tr><td>${esc(c)}</td><td class="low">${fmt(v)}</td><td><button class="sm" onclick="payD(${JSON.stringify(c).replace(/"/g,'&quot;')})">تسجيل دفعة</button></td></tr>`);
+ return `<div class="card"><h3>ذمم الزبائن</h3>${table(['الزبون','المتبقي',''],rows,'لا توجد ديون. عند البيع اكتب اسم الزبون وأدخل مبلغاً أقل من الإجمالي لتسجيل دين.')}</div>`},
+rep(){
+ const m=tab_m||today().slice(0,7);
+ const S=db.sales.filter(s=>s.date.startsWith(m)),E=db.expenses.filter(e=>e.date.startsWith(m));
+ const sales=S.reduce((a,s)=>a+s.qty*s.price,0),cogs=S.reduce((a,s)=>a+s.qty*s.cost,0),ex=E.reduce((a,e)=>a+e.amt,0);
+ const gross=sales-cogs,net=gross-ex,stock=db.products.reduce((a,p)=>a+p.qty*p.cost,0);
+ return `<div class="card"><h3>تقرير شهري</h3><label style="max-width:200px">الشهر<input type="month" value="${m}" onchange="setM(this.value)"></label></div>
+ <div class="kpi"><div><span>المبيعات</span><b>${fmt(sales)}</b></div><div><span>تكلفة البضاعة المباعة</span><b>${fmt(cogs)}</b></div><div><span>مجمل الربح</span><b>${fmt(gross)}</b></div><div><span>المصاريف</span><b>${fmt(ex)}</b></div><div class="net"><span>صافي الربح</span><b class="${net<0?'low':''}">${fmt(net)}</b></div><div><span>قيمة المخزون (بسعر الشراء)</span><b>${fmt(stock)}</b></div></div>`},
+acct(){return `<div class="card"><h3>الحساب</h3><p>البيانات تُحفظ في Firebase وتعمل أيضاً بدون إنترنت، وتُزامَن تلقائياً عند عودة الاتصال.</p><button class="go" onclick="exportJ()">تصدير نسخة احتياطية (ملف)</button> <button class="sm" onclick="out()">تسجيل الخروج</button></div>`}
+};
+
+const act={
+go(k){tab=k;render()},
+setM(v){tab_m=v;render()},
+prod,
+login(e){e.preventDefault();const f=e.target.elements;signInWithEmailAndPassword(auth,f.email.value.trim(),f.pw.value).catch(()=>toast('بيانات الدخول غير صحيحة أو لا يوجد اتصال'))},
+out(){signOut(auth)},
+addP(e){e.preventDefault();const f=e.target.elements,b=writeBatch(fs);
+ put(b,'products',{name:f.name.value.trim(),size:f.size.value.trim(),color:f.color.value.trim(),cost:n(f.cost.value),price:n(f.price.value),qty:Math.floor(n(f.qty.value))});
+ b.commit().catch(x=>toast('تعذّر الحفظ: '+x.code));toast('تمت إضافة المنتج')},
+delP(id){const p=prod(id);if(!confirm('حذف '+p.name+'؟'))return;const b=writeBatch(fs);b.delete(D('products',id));b.commit()},
+addS(e){e.preventDefault();const f=e.target.elements,p=prod(f.pid.value),q=Math.floor(n(f.qty.value)),pr=n(f.price.value),tot=q*pr,cust=f.cust.value.trim();
+ if(q>p.qty)return toast('الكمية المتوفرة '+p.qty+' فقط');
+ let paid=f.paid.value===''?tot:n(f.paid.value);
+ if(paid<tot&&!cust)return toast('اكتب اسم الزبون لتسجيل الدين');
+ if(paid>tot)paid=tot;
+ const b=writeBatch(fs);
+ b.update(D('products',p.id),{qty:increment(-q)});
  put(b,'sales',{date:today(),pid:p.id,qty:q,price:pr,cost:p.cost,cust,paid});
  b.commit().catch(x=>toast('تعذّر الحفظ: '+x.code));toast('تم البيع: '+fmt(tot))},
 addB(e){e.preventDefault();const f=e.target.elements,p=prod(f.pid.value),q=Math.floor(n(f.qty.value)),c=n(f.cost.value),b=writeBatch(fs);
