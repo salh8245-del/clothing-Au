@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6b8cc">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>محاسبة Au Clothing</title>
+<style>
+:root{--bg:#fff3f7;--card:#fff;--ink:#3b2430;--mute:#8a6b78;--main:#f6b8cc;--acc:#e07a9c;--line:#f0d3dd;--bad:#c0392b;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Tahoma,"Segoe UI",Arial,sans-serif}
+header{background:var(--main);padding:14px 16px;font-size:20px;font-weight:700}
+nav{display:flex;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0}
+nav button{flex:1;min-width:92px;padding:12px 8px;border:0;background:none;color:var(--mute);font:inherit;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:#a8325a;border-color:var(--acc);font-weight:700}
+main{max-width:860px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+h3{margin:0 0 10px;font-size:17px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+label{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:3px}
+input,select{padding:9px;border:1px solid var(--line);border-radius:6px;background:#fffafc;color:var(--ink);font:inherit;width:100%}
+button.go{background:var(--main);color:var(--ink);border:1px solid var(--acc);border-radius:6px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;align-self:end}
+button.sm{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 9px;font:inherit;font-size:13px;cursor:pointer}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:600}
+.low{color:var(--bad);font-weight:700}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}
+.kpi b{display:block;font-size:22px}
+.kpi span{font-size:13px;color:var(--mute)}
+.net{border-right:5px solid var(--acc)!important}
+.empty{color:var(--mute);padding:8px 0;margin:0}
+.filterrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end}.seasonbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.seasonbar strong{color:#8b3155}.seasonbar select{max-width:180px}.hint{font-size:12px;color:var(--mute);margin:6px 0 0}
+#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:9}
+:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+</style>
+</head>
+<body>
+<header>برنامج محاسبة لمحل Au Clothing <span id="sync" style="float:left;font-size:13px;font-weight:400"></span></header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<div id="msg" role="status"></div>
+<script type="module">
+import {firebaseConfig} from "./firebase-config.js";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,onSnapshot,writeBatch,increment} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const app=initializeApp(firebaseConfig);
+const DBID=(()=>{try{const q=new URLSearchParams(location.search).get('db');if(q)localStorage.setItem('dbid',q==='reset'?'(default)':q);return localStorage.getItem('dbid')||'(default)'}catch(e){return '(default)'}})();
+const fs=initializeFirestore(app,{experimentalAutoDetectLongPolling:true,localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})},DBID);
+const auth=getAuth(app);
+const NAMES=['products','sales','purchases','expenses','pay','returns','suppliers','spay','rates','loans','closes','credits','capital','settings'];
+const EMPTY=()=>Object.fromEntries(NAMES.map(k=>[k,[]]));
+let uid=null,unsubs=[],loaded=false,tab='products',repFrom='',repTo='',repMode='range',rmMode='ret',selSup='',selCust='',selSale='',selProd='',prodQ='',lowOnly=false,selPur='',cashD='',selRet='',selInv='',rsQ='',saleD='',rsD='',purQ='',invQ='',prodSeasonFilter='active',prodYearQ='',invSeasonFilter='active',invYearQ='';
+let db=EMPTY();
+const C=k=>collection(fs,'stores',uid,k);
+const D=(k,id)=>doc(fs,'stores',uid,k,id);
+const put=(b,k,o)=>b.set(doc(C(k)),{...o,ts:Date.now()});
+const $=s=>document.querySelector(s);
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const n=v=>Number(v)||0;
+const fmt=v=>n(v).toLocaleString('en-US',{maximumFractionDigits:2});
+const dual=v=>`${fmt(v)} ل.س <small style="display:block;font-size:13px;font-weight:400;color:var(--mute)">${curRate()>0?fmt(n(v)/curRate())+' $':'الدولار: حدّد سعر الصرف'}</small>`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(t){const m=$('#msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',2500)}
+const prod=id=>db.products.find(p=>p.id===id);
+const pyear=p=>{const v=String(p?.year??p?.seasonYear??'').trim(),m=v.match(/(?:19|20)\d{2}/);return m?m[0]:v};
+const pname=p=>p?`${esc(p.name)} (${esc(p.code||'-')})${pyear(p)?' — سنة '+esc(pyear(p)):''}`:'(محذوف)';
+const popts=()=>db.products.filter(isActiveProduct).map(p=>`<option value="${p.id}">${pname(p)} (${p.qty})</option>`).join('');
+const tabs={products:'المنتجات',inv:'المخزن',sale:'بيع',buy:'شراء',rs:'مرتجع / تبديل',sup:'الموردين',exp:'المصاريف',debt:'الديون',cash:'الصندوق',rep:'التقارير',acct:'الحساب'};
+const seasonNames={winter:'شتوي',summer:'صيفي',shared:'مشترك بين الموسمين'};
+const activeSeason=()=>{const c=db.settings.find(x=>x.id==='season_config');return c?.activeSeason||'winter'};
+const seasonOf=p=>p.season||'shared';
+const isActiveProduct=p=>!!p&&seasonOf(p)===activeSeason();
+const seasonMatches=(p,f)=>f==='all'?['winter','summer'].includes(seasonOf(p)):(f==='active'?isActiveProduct(p):seasonOf(p)===f);
+const seasonLabel=v=>seasonNames[v]||'مشترك';
+const seasonSelect=(name,value)=>`<select name="${name}"><option value="winter"${value==='winter'?' selected':''}>شتوي</option><option value="summer"${value==='summer'?' selected':''}>صيفي</option><option value="shared"${value==='shared'?' selected':''}>مشترك بين الموسمين</option></select>`;
+const locationSelect=(name,value)=>`<select name="${name}"><option value="store"${(value||'store')==='store'?' selected':''}>صالة البيع</option><option value="warehouse"${value==='warehouse'?' selected':''}>المخزن</option><option value="display"${value==='display'?' selected':''}>معروض</option></select>`;
+function table(h,rows,empty){return rows.length?`<div class="tw"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.join('')}</table></div>`:`<div class="empty">${empty}</div>`}
+
+let seen=new Set(),st={},serr='';
+function setSync(){const el=$('#sync');if(!el)return;if(!uid){el.textContent='';return}const v=Object.values(st);
+ el.textContent=serr?'🔴 خطأ: '+serr:v.length&&v.every(x=>x.c)?'🔴 بدون اتصال بالسيرفر (محفوظ على الجهاز)':v.some(x=>x.p)?'🟠 جارٍ رفع التعديلات':'🟢 متزامن'}
+onAuthStateChanged(auth,u=>{
+  unsubs.forEach(f=>f());unsubs=[];loaded=false;seen=new Set();st={};serr='';
+  if(u){uid=u.uid;
+    NAMES.forEach(k=>unsubs.push(onSnapshot(C(k),{includeMetadataChanges:true},s=>{
+      st[k]={p:s.metadata.hasPendingWrites,c:s.metadata.fromCache};if(!s.metadata.fromCache)serr='';
+      if(!seen.has(k)||s.docChanges().length){db[k]=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.ts||0)-(b.ts||0));seen.add(k);if(seen.size>=NAMES.length)loaded=true;if(loaded)render()}
+      setSync()
+    },e=>{serr=e.code||'error';setSync();toast('خطأ في القراءة: '+e.code)})));
+  }else{uid=null;db=EMPTY()}
+  render();setSync();
+});
+
+function render(){
+  $('#nav').innerHTML=uid?Object.entries(tabs).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${v}</button>`).join(''):'';
+  if(!uid)return $('#app').innerHTML=views.login();
+  if(!loaded)return $('#app').innerHTML='<div class="card empty">جارٍ تحميل البيانات...</div>';
+  $('#app').innerHTML=banner()+views[tab]();
+}
+
+const curRate=()=>{const r=db.rates.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop();return r?n(r.rate):0};
+const pc=p=>p.costUsd?p.costUsd*curRate():n(p.cost);
+const banner=()=>{const ok=db.rates.some(x=>x.date===today()),r=curRate(),sea=activeSeason();return `<div class="card"><div class="seasonbar"><strong>الموسم النشط:</strong><select aria-label="الموسم النشط" onchange="setSeason(this.value)"><option value="winter"${sea==='winter'?' selected':''}>❄️ شتوي</option><option value="summer"${sea==='summer'?' selected':''}>☀️ صيفي</option></select><span class="hint">كل العمليات والمخزون والبحث محصورة بالموسم المحدد؛ يمكنك استخدام الكود نفسه في الموسم الآخر دون تداخل.</span></div><hr style="border:0;border-top:1px solid var(--line);margin:12px 0"><form onsubmit="setRate(event)"><label>${ok?'سعر صرف اليوم':'أدخل سعر صرف اليوم'} (ل.س لكل $)${!ok&&r?' — آخر سعر: '+fmt(r):''}<input name="r" type="number" step="any" min="0" required value="${ok?r:''}"></label><button class="go">حفظ سعر اليوم</button></form></div>${lowBanner()}`};
+const finds=c=>{c=(c||'').trim().toLowerCase();if(!c)return[];const base=db.products.filter(isActiveProduct);let x=base.filter(p=>(p.code||'').toLowerCase()===c);if(x.length)return x;x=base.filter(p=>p.name.toLowerCase()===c);if(x.length)return x;return base.filter(p=>p.name.toLowerCase().includes(c)||(p.code||'').toLowerCase().includes(c))};
+const findP=c=>{const L=finds(c);return L.length===1?L[0]:null};
+const pn2=p=>p?`${esc(p.name)} (${esc(p.code||'-')})${pyear(p)?' — سنة '+esc(pyear(p)):''}`:'(محذوف)';
+const totUsd=(f,q)=>n(f.tot.value)>0?n(f.tot.value):q*n(f.usd.value);
+const productCostCalc=f=>{if(!f||!f.usd||!f.qty||!f.tot)return;const total=Math.max(0,n(f.usd.value))*Math.max(0,Math.floor(n(f.qty.value)));f.tot.value=total.toFixed(2)};
+const payUsd=(f,t)=>f.mode.value==='cash'?t:Math.max(0,t-Math.min(n(f.paid.value),t)); // paid field in purchase forms now means remaining supplier debt
+function custData(){const C={};
+ const inv=[...db.sales.filter(s=>s.cust&&s.qty*s.price-s.paid>0.005),...db.loans.map(l=>({id:l.id,date:l.date,ts:l.ts,cust:l.name,qty:1,price:l.amt,paid:0,loan:true,note:l.note}))];
+ inv.forEach(s=>{(C[s.cust]=C[s.cust]||{inv:[],pool:0}).inv.push(s)});
+ db.pay.forEach(p=>{if(C[p.cust])C[p.cust].pool+=p.amt});db.returns.forEach(r=>{if(r.cust&&C[r.cust])C[r.cust].pool+=r.value-r.refund});
+ Object.values(C).forEach(c=>{let pool=c.pool;c.inv=c.inv.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).map(s=>{const owe=s.qty*s.price-s.paid,t=Math.min(owe,Math.max(pool,0));pool-=t;return{s,owe,rem:owe-t}});c.rem=c.inv.reduce((a,i)=>a+i.rem,0)});return C}
+const pinfo=c=>{if(!(c||'').trim())return '';const L=finds(c);return !L.length?'لا يوجد منتج مطابق':L.length===1?`✓ ${pname(L[0])} | المتوفر: ${L[0].qty}`:'عدة منتجات، اكتب الكود: '+L.slice(0,6).map(p=>`${esc(p.code||'-')} (${pname(p)})`).join('، ')};
+const supOpts=v=>'<option value="">بدون مورد</option>'+db.suppliers.map(s=>`<option value="${s.id}"${s.id===v?' selected':''}>${esc(s.name)}</option>`).join('');
+const supName=id=>{const s=db.suppliers.find(x=>x.id===id);return s?esc(s.name):'-'};
+const supDebt=id=>db.purchases.filter(p=>p.sid===id).reduce((a,p)=>a+p.qty*p.costUsd-p.paid,0)-db.spay.filter(p=>p.sid===id).reduce((a,p)=>a+p.amt,0);
+const left=s=>s.qty-db.returns.filter(r=>r.saleId===s.id).reduce((a,r)=>a+r.qty,0);
+const saleOf=id=>db.sales.find(s=>s.id===id);
+const sopts=(c,cu)=>{const p=findP(c),k=(cu||'').trim().toLowerCase();return db.sales.filter(s=>left(s)>0&&isActiveProduct(prod(s.pid))&&(!p||s.pid===p.id)&&(!k||(s.cust||'').toLowerCase().includes(k))).slice(-60).reverse().map(s=>`<option value="${s.id}">${s.date} | ${pn2(prod(s.pid))} | ${esc(s.cust||'نقدي')} | متبقي ${left(s)} | ${fmt(s.price)}</option>`).join('')};
+function summ(S,R,E){const g=S.reduce((a,s)=>a+s.qty*s.price,0),rv=R.reduce((a,r)=>a+r.value,0),c=S.reduce((a,s)=>a+s.qty*s.cost,0)-R.filter(r=>!r.damaged).reduce((a,r)=>a+r.qty*r.cost,0),ex=E.filter(e=>!e.wd).reduce((a,e)=>a+e.amt,0),wd=E.filter(e=>e.wd).reduce((a,e)=>a+e.amt,0),net=g-rv,pr=net-c;return{cnt:S.filter(s=>!s.swap).length,net,rv,c,pr,ex,wd,fin:pr-ex,aft:pr-ex-wd}}
+const kpi=(o,extra='')=>`<div class="kpi"><div><span>عدد الفواتير</span><b>${o.cnt}</b></div><div><span>المبيعات (بعد المرتجع)</span><b>${dual(o.net)}</b></div><div><span>المرتجعات</span><b>${dual(o.rv)}</b></div><div><span>تكلفة البضاعة</span><b>${dual(o.c)}</b></div><div><span>مجمل الربح</span><b>${dual(o.pr)}</b></div><div><span>المصاريف</span><b>${dual(o.ex)}</b></div><div><span>صافي الربح</span><b class="${o.fin<0?'low':''}">${dual(o.fin)}</b></div><div><span>المسحوبات من الأرباح</span><b>${dual(o.wd)}</b></div><div class="net"><span>الربح بعد السحب</span><b class="${o.aft<0?'low':''}">${dual(o.aft)}</b></div>${extra}</div>`;
+const tog=(a,b,cur,fa,fb)=>`<button class="${cur===a[0]?'go':'sm'}" onclick="${fa}('${a[0]}')">${a[1]}</button> <button class="${cur===b[0]?'go':'sm'}" onclick="${fa}('${b[0]}')">${b[1]}</button>`;
+
+const credBal=c=>db.credits.filter(x=>x.cust===c).reduce((a,x)=>a+(x.kind==='add'?x.amt:-x.amt),0);
+const credCard=()=>{const m={};db.credits.forEach(x=>{m[x.cust]=(m[x.cust]||0)+(x.kind==='add'?x.amt:-x.amt)});const rows=Object.entries(m).filter(([,v])=>v>0.005).map(([c,v])=>`<tr><td>${esc(c)}</td><td>${fmt(v)}</td></tr>`);return `<div class="card"><h3>أرصدة الزبائن (لهم عندي)</h3>${table(['الزبونة','الرصيد'],rows,'لا توجد أرصدة.')}</div>`};
+const rsResults=()=>{const q=rsQ.trim().toLowerCase();if(!q&&!rsD)return '<p class="empty">اكتب كود المنتج أو اسمه، أو اسم الزبونة أو رقم الفاتورة أو اختر تاريخاً لعرض الفواتير المطابقة.</p>';let L=db.sales.filter(s=>left(s)>0&&isActiveProduct(prod(s.pid)));
+ if(rsD)L=L.filter(s=>s.date===rsD);
+ if(q)L=L.filter(s=>{const p=prod(s.pid)||{};return [String(s.no||''),s.cust||'',s.phone||'',p.name||'',p.code||'',s.date].some(v=>String(v).toLowerCase().includes(q))});
+ return table(['رقم / تاريخ','الزبونة','المنتج','السعر','اشترت','أُرجع',''],L.slice(-15).reverse().map(s=>{const p=prod(s.pid)||{};return `<tr><td>${s.no?'#'+s.no+' ':''}${s.date}</td><td>${esc(s.cust||'نقدي')}${s.phone?' '+esc(s.phone):''}</td><td>${esc(p.name)} (${esc(p.code||'-')})${pyear(p)?' — سنة '+esc(pyear(p)):''}</td><td>${fmt(s.price)}</td><td>${s.qty}</td><td>${s.qty-left(s)}</td><td><button class="sm" onclick="pickInv('${s.id}')">اختيار</button></td></tr>`}),'لا توجد فواتير مطابقة.')};
+const varOpts=()=>{const a=selInv?saleOf(selInv):null,p=a&&prod(a.pid);if(!p)return'';return '<option value="">—</option>'+db.products.filter(x=>isActiveProduct(x)&&x.id!==p.id&&x.name.toLowerCase()===p.name.toLowerCase()&&x.qty>0).map(x=>`<option value="${esc(x.code||x.name)}">${esc(x.name)}${pyear(x)?' — سنة '+esc(pyear(x)):''} (المتوفر ${x.qty})</option>`).join('')};
+const rateAt=d=>{const r=db.rates.filter(x=>x.date<=d).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop();return r?n(r.rate):curRate()};
+const pcAt=(p,d)=>p.costUsd?p.costUsd*rateAt(d):n(p.cost);
+const getLow=()=>{try{const v=localStorage.getItem('low');return v===null?2:n(v)}catch(e){return 2}};
+const lowBanner=()=>{const k=db.products.filter(p=>isActiveProduct(p)&&p.qty<=getLow()).length;return k?`<div class="card"><b class="low">⚠ منتجات ناقصة: ${k}</b> <button class="sm" onclick="goLow()">عرض</button></div>`:''};
+const cashOf=d=>{const S=db.sales.filter(s=>s.date===d),R=db.returns.filter(r=>r.date===d),E=db.expenses.filter(e=>e.date===d);
+ const sales=S.reduce((a,s)=>a+s.paid-(s.cu||0),0),pay=db.pay.filter(p=>p.date===d).reduce((a,p)=>a+p.amt,0),ref=R.reduce((a,r)=>a+(r.swap?r.value-(r.credited||0):r.refund),0),ex=E.filter(e=>!e.wd).reduce((a,e)=>a+e.amt,0),wd=E.filter(e=>e.wd).reduce((a,e)=>a+e.amt,0),loan=db.loans.filter(l=>l.date===d).reduce((a,l)=>a+l.amt,0),cap=db.capital.filter(c=>c.date===d).reduce((a,c)=>a+c.amt,0);
+ return{sales,pay,ref,ex,wd,loan,cap,net:sales+pay+cap-ref-ex-wd-loan}};
+const lastClose=d=>db.closes.filter(c=>c.date<d).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop();
+const closeOf=d=>db.closes.filter(c=>c.date===d).sort((a,b)=>(a.ts||0)-(b.ts||0)).pop();
+const slogHtml=()=>{const d=saleD||today();
+ const pairs=new Map();db.returns.filter(r=>r.swap).forEach(r=>{const sb=db.sales.find(x=>x.swap&&(r.wid?x.wid===r.wid:Math.abs((x.ts||0)-(r.ts||0))<1000));if(sb)pairs.set(sb.id,r)});
+ const L=[...db.sales.filter(s=>s.date===d&&isActiveProduct(prod(s.pid))).map(s=>({t:s.ts||0,s})),...db.pay.filter(p=>p.date===d).map(p=>({t:p.ts||0,p}))].sort((a,b)=>a.t-b.t).reverse();
+ const rows=L.map(x=>{if(x.p)return `<tr><td>سداد دين</td><td>-</td><td>${fmt(x.p.amt)}</td><td>-</td><td>${esc(x.p.cust)}</td><td>${fmt(x.p.amt)}</td><td></td></tr>`;
+  const s=x.s,r=pairs.get(s.id);
+  if(r){const df=s.qty*s.price-r.value,net=s.paid-(r.value-(r.credited||0));return `<tr><td>تبديل${s.no?' #'+s.no:''}<br>الأصلية: ${pn2(prod(r.pid))}<br>البديلة: ${pn2(prod(s.pid))}</td><td>${r.qty} ← ${s.qty}</td><td class="${df<0?'low':''}">${df>0.005?'زيادة '+fmt(df):df<-0.005?'نقصان '+fmt(-df):'بدون فرق'}</td><td>-</td><td>${esc(s.cust)}</td><td>${fmt(net)}</td><td><button class="sm" onclick="delRet('${r.id}')">إلغاء</button></td></tr>`}
+  const dc=s.list>s.price?(s.list-s.price)*s.qty:0;return `<tr><td>${pn2(prod(s.pid))}${s.swap?' (تبديل)':''}${s.no?' #'+s.no:''}</td><td>${s.qty}</td><td>${fmt(s.qty*s.price)}</td><td>${dc?fmt(dc):'-'}</td><td>${esc(s.cust)}</td><td>${fmt(s.paid)}</td><td>${s.swap?'':`<button class="sm" onclick="setSale('${s.id}')">تعديل</button>`}</td></tr>`});
+ return `<div class="card"><h3>سجل المبيعات</h3><label style="max-width:220px">التاريخ<input type="date" value="${d}" onchange="saleDate(this.value)"></label><div style="margin-top:8px">${table(['المنتج','الكمية','الإجمالي','الخصم','الزبون','المدفوع',''],rows,'لا توجد حركات في هذا التاريخ.')}</div></div>`};
+const cashBal=()=>{const lc=db.closes.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0)).pop(),from=lc?lc.date:'',ds=new Set();[db.sales,db.pay,db.returns,db.expenses,db.loans,db.capital].forEach(a=>a.forEach(x=>{if(x.date>from)ds.add(x.date)}));let t=lc?lc.counted:0;ds.forEach(d=>{t+=cashOf(d).net});return t};
+const capCard=()=>{const rows=db.capital.slice(-10).reverse().map(x=>`<tr><td>${x.date}</td><td>${fmt(x.amt)}</td><td>${esc(x.note)}</td><td><button class="sm" onclick="delCap('${x.id}')">حذف</button></td></tr>`);
+ return `<div class="card"><h3>إثبات زيادة رأس المال النقدي</h3><form onsubmit="addCap(event)"><label>المبلغ بالسوري<input name="amt" type="number" step="any" min="1" required></label><label>التاريخ<input name="date" type="date" value="${today()}"></label><label>ملاحظة<input name="note"></label><button class="go">إضافة</button></form><p class="empty">سجّل هنا النقد الذي معك عند بدء البرنامج، أو أي مبلغ تضيفه من خارج المبيعات. يدخل في رصيد الصندوق وفي رأس المال (تبويب المخزن).</p>${table(['التاريخ','المبلغ','ملاحظة',''],rows,'لا توجد إضافات.')}</div>`};
+const purTable=()=>{const q=purQ.trim().toLowerCase();let L=db.purchases.filter(p=>p.sid!==undefined&&isActiveProduct(prod(p.pid)));
+ if(q)L=L.filter(p=>{const pr=prod(p.pid)||{},sp=db.suppliers.find(x=>x.id===p.sid)||{};return [sp.name||'',pr.name||'',pr.code||'',p.date].some(v=>String(v).toLowerCase().includes(q))});else L=L.slice(-30);
+ L=L.slice().reverse();const tot=L.reduce((a,p)=>a+p.qty*p.costUsd,0),pd=L.reduce((a,p)=>a+p.paid,0);
+ return (q?`<p class="empty">${L.length} فاتورة | الإجمالي ${fmt(tot)} $ | المدفوع ${fmt(pd)} $</p>`:'')+table(['التاريخ','المنتج','المورد','الكمية','سعر $','الإجمالي $','المدفوع $','دين للمورد $',''],L.map(s=>`<tr><td>${s.date}</td><td>${pn2(prod(s.pid))}</td><td>${supName(s.sid)}</td><td>${s.qty}</td><td>${fmt(s.costUsd)} $</td><td>${fmt(s.qty*s.costUsd)} $</td><td>${fmt(s.paid)} $</td><td class="low">${fmt(s.qty*s.costUsd-s.paid)} $</td><td><button class="sm" onclick="setPur('${s.id}')">تعديل</button></td></tr>`),q?'لا توجد فواتير مطابقة.':'لا توجد مشتريات بعد.')};
+const invTable=()=>{const q=invQ.trim().toLowerCase(),y=invYearQ.trim(),sold={},buy={};
+ db.sales.forEach(s=>{sold[s.pid]=(sold[s.pid]||0)+s.qty});db.returns.forEach(r=>{sold[r.pid]=(sold[r.pid]||0)-r.qty});db.purchases.forEach(p=>{buy[p.pid]=(buy[p.pid]||0)+p.qty});
+ const L=db.products.filter(p=>seasonMatches(p,invSeasonFilter)&&(!y||pyear(p)===y)&&(!q||(p.code||'').toLowerCase().includes(q)||p.name.toLowerCase().includes(q))).slice().sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+ return table(['الكود','الاسم','السنة','الموسم','الموقع','الكمية المشتراة','صافي الكمية المباعة','المتوفر','قيمة التكلفة','قيمة البيع'],L.map(p=>`<tr><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(pyear(p)||'-')}</td><td>${seasonLabel(seasonOf(p))}</td><td>${p.location==='warehouse'?'المخزن':p.location==='display'?'معروض':'صالة البيع'}</td><td>${buy[p.id]||0}</td><td>${sold[p.id]||0}</td><td class="${p.qty<=getLow()?'low':''}">${p.qty}</td><td>${fmt(p.qty*pc(p))}</td><td>${fmt(p.qty*p.price)}</td></tr>`),'لا توجد منتجات مطابقة.')};
+const supCard=()=>{const rows=db.suppliers.map(x=>({x,d:supDebt(x.id)})).filter(r=>r.d>0.005).map(r=>`<tr><td>${esc(r.x.name)}</td><td class="low">دين للمورد: ${fmt(r.d)} $</td><td><button class="sm" onclick="paySup('${r.x.id}')">دفعة</button> <button class="sm" onclick="goSup('${r.x.id}')">تفاصيل</button></td></tr>`);
+ return `<div class="card"><h3>ديون الموردين (دين للمورد، بالدولار)</h3>${table(['المورد','المبلغ',''],rows,'لا توجد ديون للموردين.')}</div>`};
+const prodTable=()=>{const q=prodQ.trim().toLowerCase(),y=prodYearQ.trim();const L=db.products.filter(p=>isActiveProduct(p)&&(!y||pyear(p)===y)&&(!q||(p.code||'').toLowerCase().includes(q)||p.name.toLowerCase().includes(q))&&(!lowOnly||p.qty<=getLow()));if(lowOnly)L.sort((a,b)=>a.qty-b.qty);
+ return table(['الكود','الاسم','السنة','الموسم','الموقع','المورد','شراء $','التكلفة ل.س (اليوم)','البيع','الربح/قطعة','الكمية',''],L.map(p=>{const c=pc(p);return `<tr><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(pyear(p)||'-')}</td><td>${seasonLabel(seasonOf(p))}</td><td>${p.location==='warehouse'?'المخزن':p.location==='display'?'معروض':'صالة البيع'}</td><td>${supName(p.supId)}</td><td>${p.costUsd?fmt(p.costUsd)+' $':'-'}</td><td>${fmt(c)}</td><td>${fmt(p.price)}</td><td>${fmt(p.price-c)}</td><td class="${p.qty<=getLow()?'low':''}">${p.qty}</td><td><button class="sm" onclick="setProd('${p.id}')">تعديل</button> <button class="sm" onclick="delP('${p.id}')">حذف</button></td></tr>`}),'لا توجد منتجات مطابقة.')};
+const views={
+login(){return `<div class="card"><h3>تسجيل الدخول</h3><form onsubmit="login(event)"><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="username"></label><label>كلمة المرور<input name="pw" type="password" required autocomplete="current-password"></label><button class="go">دخول</button></form></div>`},
+products(){
+ const ep=prod(selProd);
+ const edit=ep?`<div class="card"><h3>تعديل المنتج</h3><form onsubmit="saveProd(event)">
+ <label>الكود<input name="code" value="${esc(ep.code)}"></label><label>الاسم<input name="name" required value="${esc(ep.name)}"></label><label>السنة<input name="year" value="${esc(pyear(ep))}" placeholder="مثلاً 2025"></label><label>الموسم<input value="${seasonLabel(seasonOf(ep))}" readonly><input type="hidden" name="season" value="${seasonOf(ep)}"></label><label>مكان التخزين ${locationSelect('location',ep.location)}</label>
+ <label>المورد<select name="sid">${supOpts(ep.supId||'')}</select></label><label>سعر القطعة بالدولار $<input name="usd" type="number" step="any" min="0" value="${ep.costUsd||''}" oninput="productCostCalc(this.form)"></label><label>الكمية<input name="qty" type="number" min="0" value="${ep.qty}" oninput="productCostCalc(this.form)"></label><label>إجمالي الفاتورة بالدولار $<input name="tot" type="number" step="any" readonly value="${(n(ep.costUsd)*n(ep.qty)).toFixed(2)}"></label>
+ <label>سعر البيع بالسوري<input name="price" type="number" step="any" min="0" required value="${ep.price}"></label>
+ <button class="go">حفظ التعديل</button> <button type="button" class="sm" onclick="cancelEdit()">إلغاء</button></form></div>`:'';
+ return `${edit}<div class="card"><h3>إضافة منتج أو تسجيل مخزون افتتاحي</h3><form onsubmit="addP(event)" oninput="productCostCalc(this)">
+ <label>الكود<input name="code" required></label><label>اسم المنتج<input name="name" required></label><label>السنة<input name="year" placeholder="مثلاً 2025"></label><label>الموسم<input value="${seasonLabel(activeSeason())}" readonly><input type="hidden" name="season" value="${activeSeason()}"></label><label>مكان التخزين ${locationSelect('location','store')}</label>
+ <label>المورد<select name="sid">${supOpts('')}</select></label><label>سعر القطعة بالدولار $<input name="usd" type="number" step="any" min="0"></label><label>الكمية<input name="qty" type="number" min="0" value="0"></label><label>إجمالي الفاتورة بالدولار $<input name="tot" type="number" step="any" readonly value="0.00"></label>
+ <label>سعر البيع بالسوري<input name="price" type="number" step="any" min="0" required></label>
+ <label>نوع الإدخال<select name="stockMode"><option value="purchase">شراء جديد (يسجل فاتورة ومورد)</option><option value="opening">مخزون افتتاحي موجود مسبقاً</option></select></label><label>طريقة الدفع للشراء<select name="mode"><option value="cash">نقدي (سداد كامل)</option><option value="credit">آجل للمورد (كلي أو جزئي)</option></select></label><label>الدين المتبقي للمورد بالدولار (للكاش = 0)<input name="paid" type="number" step="any" min="0" value="0"></label><button class="go">إضافة المنتج</button></form><p class="hint">اختر «مخزون افتتاحي» للبضاعة الموجودة عندك قبل بدء البرنامج؛ لن تُسجّل كمشتريات ولن تنشئ ديناً للمورد.</p></div>
+ <div class="card"><h3>منتجات الموسم ${seasonLabel(activeSeason())} (${db.products.filter(isActiveProduct).length})</h3><form onsubmit="return false" style="margin-bottom:8px"><label>بحث بالكود أو الاسم<input value="${esc(prodQ)}" oninput="psearch(this.value)" autocomplete="off"></label><label>السنة (مطابقة تامة)<input value="${esc(prodYearQ)}" oninput="productYearSearch(this.value)" placeholder="مثلاً 2019" inputmode="numeric"></label><label>الموسم المعروض<input value="${seasonLabel(activeSeason())}" readonly></label><label>تنبيه النقص عند كمية ≤<input type="number" min="0" value="${getLow()}" onchange="setLow(this.value)"></label><button type="button" class="${lowOnly?'go':'sm'}" onclick="togLow()">الناقصة فقط</button></form><div id="ptab">${prodTable()}</div></div>`},
+sale(){
+ const s0=selSale?saleOf(selSale):null;
+ const edit=s0?`<div class="card"><h3>تعديل فاتورة ${s0.date} — ${pn2(prod(s0.pid))}</h3><form onsubmit="saveSale(event)">
+ <label>تاريخ الفاتورة<input name="date" type="date" value="${s0.date}"></label><label>الكمية<input name="qty" type="number" min="1" required value="${s0.qty}"></label><label>سعر القطعة<input name="price" type="number" step="any" min="0" required value="${s0.price}"></label>
+ <label>اسم الزبون<input name="cust" value="${esc(s0.cust)}"></label><label>المدفوع (إن غيّرت الكمية أو السعر عدّل هذا أيضاً)<input name="paid" type="number" step="any" min="0" value="${s0.paid}"></label>
+ <button class="go">حفظ التعديل</button> <button type="button" class="sm" onclick="cancelEdit()">إلغاء</button> <button type="button" class="sm" onclick="delSale()">إلغاء الفاتورة</button></form></div>`:'';
+ return `${edit}<div class="card"><h3>فاتورة بيع</h3><form onsubmit="addS(event)" oninput="slCalc(this,event)">
+ <label>المنتج (اسم أو كود)<input name="code" autocomplete="off"></label>
+ <label>الكمية<input name="qty" type="number" min="1" value="1" required></label><label>سعر القطعة (غيّره للخصم)<input name="price" type="number" step="any" min="0" required></label>
+ <label>تاريخ الفاتورة<input name="date" type="date" value="${today()}" onchange="saleDate(this.value)"></label><label>طريقة الدفع<select name="mode"><option value="cash">نقداً (مدفوع كامل)</option><option value="credit">دين (آجل)</option><option value="bal">من رصيد الزبونة</option></select></label>
+ <label>اسم الزبونة (للدين أو الرصيد)<input name="cust"></label><label>هاتف الزبونة (اختياري)<input name="phone"></label><label>المدفوع الآن (للدين فقط، فارغ = 0)<input name="paid" type="number" step="any" min="0"></label><button class="go">تسجيل البيع</button></form>
+ <p id="pinfo" class="empty"></p></div>
+ <div id="slog">${slogHtml()}</div>`},
+buy(){
+ const ep=selPur?db.purchases.find(x=>x.id===selPur):null;
+ const edit=ep?`<div class="card"><h3>تعديل فاتورة شراء ${ep.date} — ${pn2(prod(ep.pid))}</h3><form onsubmit="savePur(event)">
+ <label>الكمية<input name="qty" type="number" min="1" required value="${ep.qty}"></label><label>إجمالي الفاتورة $<input name="tot" type="number" step="any" min="0" required value="${+(ep.qty*ep.costUsd).toFixed(4)}"></label>
+ <label>المورد<select name="sid">${supOpts(ep.sid||'')}</select></label><label>الدين المتبقي للمورد بالدولار<input name="paid" type="number" step="any" min="0" value="${Math.max(0,ep.qty*ep.costUsd-ep.paid)}"></label>
+ <button class="go">حفظ التعديل</button> <button type="button" class="sm" onclick="cancelEdit()">إلغاء</button> <button type="button" class="sm" onclick="delPur()">إلغاء الفاتورة</button></form></div>`:'';
+
+ return `${edit}<div class="card"><h3>فاتورة شراء (منتج موجود)</h3><form onsubmit="addB(event)" oninput="byCalc(this,event)">
+ <label>المنتج (اسم أو كود)<input name="code" autocomplete="off"></label><label>الكمية<input name="qty" type="number" min="1" value="1" required></label>
+ <label>المورد<select name="sid">${supOpts('')}</select></label>
+ <label>سعر القطعة بالدولار $<input name="usd" type="number" step="any" min="0"></label><label>أو إجمالي الفاتورة بالدولار $<input name="tot" type="number" step="any" min="0"></label>
+ <label>طريقة الدفع<select name="mode"><option value="cash">نقدي (سداد كامل)</option><option value="credit">آجل للمورد (كلي أو جزئي)</option></select></label>
+ <label>الدين المتبقي للمورد بالدولار (للكاش = 0)<input name="paid" type="number" step="any" min="0" value="0"></label><button class="go">تسجيل الشراء</button></form><p id="pinfo" class="empty"></p></div>
+ <div class="card"><h3>المشتريات</h3><label>ابحث عن مورد أو فاتورة (اسم المورد، اسم أو كود المنتج، أو التاريخ)<input value="${esc(purQ)}" oninput="purSearch(this.value)" autocomplete="off"></label><div id="pt" style="margin-top:8px">${purTable()}</div></div>`},
+rs(){
+ const er=selRet?db.returns.find(x=>x.id===selRet):null;
+ const edit=er?`<div class="card"><h3>تعديل مرتجع ${er.date} — ${pn2(prod(er.pid))}</h3><form onsubmit="saveRet(event)"><label>الكمية<input name="qty" type="number" min="1" required value="${er.qty}"></label><button class="go">حفظ</button> <button type="button" class="sm" onclick="cancelEdit()">إلغاء</button></form></div>`:'';
+ const t3=[['ret','↩️ إرجاع منتج'],['swap','🔄 استبدال منتج'],['log','📋 السجل']].map(([k,v])=>`<button class="${rmMode===k?'go':'sm'}" onclick="setRm('${k}')">${v}</button>`).join(' ');
+ const a=selInv?saleOf(selInv):null,ap=a&&prod(a.pid);
+ const sel=a?`<div class="card"><b>الفاتورة المختارة:</b> ${a.no?'#'+a.no+' — ':''}${a.date} — ${esc(a.cust||'نقدي')} — ${pn2(ap)} — السعر ${fmt(a.price)} — المتاح للإرجاع ${left(a)}</div>`:'';
+ const reason='<label>السبب<select name="reason"><option>مقاس غير مناسب</option><option>لون</option><option>عيب مصنعي</option><option>عدم رغبة</option><option>أخرى</option></select></label>';
+ const cond='<label>حالة القطعة المُرجَعة<select name="cond"><option value="ok">سليمة (تعود للمخزون)</option><option value="bad">تالفة (لا تعود)</option><option value="chk">تحتاج فحص (لا تعود الآن)</option></select></label>';
+ const cu=`<label>اسم الزبونة (للدين أو الرصيد)<input name="cust" value="${esc(a?a.cust:'')}"></label>`,note='<label>ملاحظات<input name="note"></label>';
+ const srch=`<div class="card"><h3>1) ابحث عن الفاتورة الأصلية</h3><label>رقم الفاتورة، اسم الزبونة، الهاتف، أو اسم/كود المنتج<input value="${esc(rsQ)}" oninput="rsSearch(this.value)" autocomplete="off"></label><label style="max-width:220px;margin-top:8px">التاريخ (اختياري)<input type="date" value="${rsD}" onchange="rsDate(this.value)"></label><div id="rres" style="margin-top:8px">${rsResults()}</div></div>`;
+ const retF=a?`<div class="card"><h3>2) إرجاع منتج</h3><form onsubmit="addR(event)" oninput="rsCalc(this,event)"><label>الكمية المُرجَعة<input name="qty" type="number" min="1" max="${left(a)}" value="1" required></label>${reason}${cond}
+ <label>طريقة رد المبلغ<select name="method"><option value="cash">نقداً</option><option value="credit">رصيد للزبونة</option><option value="debt">خصم من دينها</option></select></label>${cu}${note}<button class="go">تأكيد المرتجع</button></form><p id="diff" class="empty"></p></div>`:'';
+ const swF=a?`<div class="card"><h3>2) المُرجَع والبديل</h3><form onsubmit="addW(event)" oninput="rsCalc(this,event)"><label>كمية المُرجَع<input name="rq" type="number" min="1" max="${left(a)}" value="1" required></label>${reason}${cond}
+ <label>المنتج البديل (اسم أو كود)<input name="ncode" autocomplete="off"></label><label>أو مقاس/لون آخر من نفس الموديل<select name="var">${varOpts()}</select></label>
+ <label>كمية البديل<input name="qty" type="number" min="1" value="1" required></label><label>سعر القطعة (غيّره للخصم)<input name="price" type="number" step="any" min="0" required></label>
+ <label>تسوية الفرق<select name="mode"><option value="cash">نقداً (تدفع الزبونة أو نردّ لها)</option><option value="debt">دين على الزبونة</option><option value="credit">رصيد للزبونة</option></select></label>${cu}
+ <label>المدفوع الآن من الفرق (للدين)<input name="paid" type="number" step="any" min="0"></label>${note}<button class="go">تأكيد الاستبدال</button></form><p id="pinfo" class="empty"></p><p id="diff" class="empty">الفرق: -</p></div>`:'';
+ const M={cash:'نقداً',credit:'رصيد',debt:'خصم من الدين'},C0={ok:'سليمة',bad:'تالفة',chk:'قيد الفحص'};
+ const rows=db.returns.filter(r=>isActiveProduct(prod(r.pid))).slice(-40).reverse().map(r=>`<tr><td>${r.date}</td><td>${r.swap?'تبديل':'مرتجع'} (${C0[r.cond||(r.damaged?'bad':'ok')]})</td><td>${pn2(prod(r.pid))}</td><td>${r.qty}</td><td>${fmt(r.value)}</td><td>${r.swap?'-':M[r.method]||'-'}</td><td>${esc(r.reason)}</td><td>${r.cond==='chk'?`<button class="sm" onclick="inspect('${r.id}','ok')">سليمة</button> <button class="sm" onclick="inspect('${r.id}','bad')">تالفة</button> `:''}${r.swap?'':`<button class="sm" onclick="setRet('${r.id}')">تعديل</button> `}<button class="sm" onclick="delRet('${r.id}')">إلغاء</button></td></tr>`);
+ const bad=db.returns.filter(r=>isActiveProduct(prod(r.pid))&&r.damaged&&r.cond!=='chk'),chk=db.returns.filter(r=>isActiveProduct(prod(r.pid))&&r.cond==='chk');
+ const logH=`<div class="card"><h3>ملخص</h3><p class="empty">قطع تالفة: ${bad.reduce((x,r)=>x+r.qty,0)} (خسارة بالتكلفة ${fmt(bad.reduce((x,r)=>x+r.qty*r.cost,0))}) | قطع قيد الفحص: ${chk.reduce((x,r)=>x+r.qty,0)}</p></div><div class="card"><h3>سجل المرتجعات والاستبدالات</h3>${table(['التاريخ','النوع','المنتج','الكمية','القيمة','الطريقة','السبب',''],rows,'لا توجد حركات.')}</div>`;
+ const body=rmMode==='log'?logH:srch+sel+(a?(rmMode==='ret'?retF:swF):'<div class="card empty">اختر فاتورة من النتائج لإكمال العملية.</div>');
+ return `${edit}<div class="card">${t3}</div>${body}`},
+sup(){
+ const rows=db.suppliers.map(s=>{const d=supDebt(s.id);return `<tr><td>${esc(s.name)}</td><td class="${d>0.005?'low':''}">${d>0.005?'دين للمورد: '+fmt(d)+' $':d<-0.005?'رصيد مستحق لي: '+fmt(-d)+' $':'لا يوجد رصيد مستحق'}</td><td><button class="sm" onclick="setSup('${s.id}')">تفاصيل</button> <button class="sm" onclick="paySup('${s.id}')">دفعة</button></td></tr>`});
+ let det='';const sp=db.suppliers.find(x=>x.id===selSup);
+ if(sp){const g={};db.purchases.filter(p=>p.sid===sp.id).forEach(p=>{g[p.pid]=(g[p.pid]||0)+p.qty});
+  const pr=Object.entries(g).map(([id,q])=>{const p=prod(id),l=p?p.qty:0;return `<tr><td>${pname(p)}</td><td>${q}</td><td>${Math.max(q-l,0)}</td><td>${l}</td></tr>`});
+  const invs=db.purchases.filter(p=>p.sid===sp.id).slice(-20).reverse().map(p=>`<tr><td>${p.date}</td><td>${pname(prod(p.pid))}</td><td>${p.qty}</td><td>${fmt(p.qty*p.costUsd)} $</td><td>${fmt(p.paid)} $</td><td class="low">${fmt(p.qty*p.costUsd-p.paid)} $</td></tr>`);
+  const pays=db.spay.filter(x=>x.sid===sp.id).slice(-15).reverse().map(x=>`<tr><td>${x.date}</td><td>${fmt(x.amt)} $</td></tr>`);
+  det=`<div class="card"><h3>${esc(sp.name)} — دين للمورد: ${fmt(supDebt(sp.id))} $</h3>${table(['المنتج','الكمية المشتراة','المباع تقديرياً','المتبقي بالمخزون'],pr,'لم تشترِ منه بعد.')}</div><div class="card"><h3>فواتير الشراء منه</h3>${table(['التاريخ','المنتج','الكمية','الإجمالي','المدفوع','الدين'],invs,'لا توجد فواتير.')}</div><div class="card"><h3>سجل دفعات المورد</h3>${table(['التاريخ','المبلغ'],pays,'لا توجد دفعات.')}</div>`}
+ return `<div class="card"><h3>إضافة مورد</h3><form onsubmit="addSup(event)"><label>اسم المورد<input name="name" required></label><button class="go">إضافة</button></form></div>
+ <div class="card"><h3>الموردون (المبالغ بالدولار)</h3>${table(['المورد','دين للمورد ($)',''],rows,'لا يوجد موردون بعد.')}</div>${det}`},
+exp(){
+ const rows=db.expenses.slice(-30).reverse().map(e=>`<tr><td>${e.date}</td><td>${e.wd?'سحب من الأرباح':'مصروف'}</td><td>${e.wd?'-':esc(e.desc)}</td><td>${fmt(e.amt)}</td><td>${esc(e.note)}</td><td><button class="sm" onclick="delE('${e.id}')">حذف</button></td></tr>`);
+ return `<div class="card"><h3>تسجيل مصروف أو مسحوبات شخصية</h3><form onsubmit="addE(event)">
+ <label>النوع<select name="kind"><option value="exp">مصروف (إيجار، كهرباء، راتب...)</option><option value="wd">سحب من الأرباح</option></select></label>
+ <label>البند (للمصروف)<input name="desc"></label><label>المبلغ بالسوري<input name="amt" type="number" step="any" min="0" required></label>
+ <label>ملاحظة<input name="note"></label><label>التاريخ<input name="date" type="date" value="${today()}"></label><button class="go">حفظ</button></form>
+ <p class="empty">السحب يُخصم من الأرباح ويظهر في التقارير مع ملاحظته، ولا يُعدّ مصروفاً.</p></div>
+ <div class="card"><h3>سجل المصروفات والمسحوبات</h3>${table(['التاريخ','النوع','البند','المبلغ','ملاحظة',''],rows,'لا توجد حركات بعد.')}</div>`},
+debt(){
+ const C=custData(),names=Object.keys(C).filter(c=>C[c].rem>0.005);
+ const rows=names.map(c=>{const a=JSON.stringify(c).replace(/"/g,'&quot;');return `<tr><td>${esc(c)}</td><td class="low">${fmt(C[c].rem)}</td><td><button class="sm" onclick="setCust(${a})">تفاصيل</button> <button class="sm" onclick="payD(${a})">دفع دين</button> <button class="sm" onclick="payAll(${a})">سدّد الكل</button></td></tr>`});
+ let det='';const cd=C[selCust];
+ if(cd&&cd.rem>0.005){const ir=cd.inv.filter(i=>i.rem>0.005).map(i=>`<tr><td>${i.s.date}</td><td>${i.s.loan?'دين مبلغ'+(i.s.note?' - '+esc(i.s.note):''):pn2(prod(i.s.pid))}</td><td>${fmt(i.s.qty*i.s.price)}</td><td class="low">${fmt(i.rem)}</td></tr>`);
+  const pr=db.pay.filter(p=>p.cust===selCust).slice(-15).reverse().map(p=>`<tr><td>${p.date}</td><td>${fmt(p.amt)}</td></tr>`);
+  det=`<div class="card"><h3>${esc(selCust)} — المتبقي: ${fmt(cd.rem)}</h3>${table(['تاريخ الدين','البيان','القيمة','المتبقي منها'],ir,'')}</div><div class="card"><h3>دفعاته</h3>${table(['التاريخ','المبلغ'],pr,'لا توجد دفعات.')}</div>`}
+ return `<div class="card"><h3>إثبات ذمة مدينة (بدون فاتورة بيع)</h3><form onsubmit="addLoan(event)"><label>اسم المدين<input name="name" required></label><label>المبلغ بالسوري<input name="amt" type="number" step="any" min="1" required></label><label>ملاحظة<input name="note"></label><button class="go">تسجيل الدين</button></form></div>
+ <div class="card"><h3>الذمم المدينة (ل.س)</h3>${table(['اسم المدين','الرصيد المستحق',''],rows,'لا توجد ديون. اختر «دين (آجل)» عند البيع، أو سجّل ذمة مدينة من النموذج أعلاه.')}<p class="empty">عند دفع دين يظهر في «سجل المبيعات» كـ«سداد دين» وفي التقارير كـ«سداد ديون مستلم»، ولا يُحسب ضمن المبيعات أو الربح مرة ثانية.</p></div>${supCard()}${credCard()}${det}`},
+rep(){
+ const from=repFrom||today().slice(0,8)+'01',to=repTo||today();
+ const ok=x=>x.date>=from&&x.date<=to;
+ const S=db.sales.filter(s=>ok(s)&&isActiveProduct(prod(s.pid))),R=db.returns.filter(r=>ok(r)&&isActiveProduct(prod(r.pid))),E=db.expenses.filter(ok),o=summ(S,R,E),coll=db.pay.filter(ok).reduce((a,p)=>a+p.amt,0);
+ const L=[...S.map(s=>({date:s.date,t:s.ts||0,row:[s.swap?'تبديل (فاتورة جديدة)':'مبيعات',pn2(prod(s.pid)),s.qty,s.qty*s.price]})),...R.map(r=>({date:r.date,t:r.ts||0,row:[(r.swap?'تبديل (مرتجع)':'مرتجع مبيعات')+(r.damaged?' — تالف':''),pn2(prod(r.pid)),r.qty,-r.value]}))].sort((a,b)=>a.date.localeCompare(b.date)||a.t-b.t);
+ const rows=L.map(x=>`<tr><td>${x.date}</td><td>${x.row[0]}</td><td>${x.row[1]}</td><td>${x.row[2]}</td><td class="${x.row[3]<0?'low':''}">${fmt(x.row[3])}</td></tr>`);
+ const W=E.filter(e=>e.wd).map(e=>`<tr><td>${e.date}</td><td>${fmt(e.amt)}</td><td>${esc(e.note)}</td></tr>`);
+ const stock=db.products.filter(isActiveProduct).reduce((a,p)=>a+p.qty*pc(p),0);
+ const G={};S.forEach(s=>{const g=G[s.pid]=G[s.pid]||{q:0,v:0,c:0};g.q+=s.qty;g.v+=s.qty*s.price;g.c+=s.qty*s.cost});R.forEach(r=>{const g=G[r.pid]=G[r.pid]||{q:0,v:0,c:0};g.q-=r.qty;g.v-=r.value;g.c-=r.damaged?0:r.qty*r.cost});
+ const top=Object.entries(G).filter(([,g])=>g.q>0).sort((a,b)=>b[1].q-a[1].q).slice(0,10).map(([id,g])=>`<tr><td>${pn2(prod(id))}</td><td>${g.q}</td><td>${fmt(g.v)}</td><td>${fmt(g.v-g.c)}</td></tr>`);
+ const best=`<div class="card" style="margin-top:14px"><h3>الأكثر مبيعاً خلال الفترة</h3>${table(['المنتج','الكمية','صافي المبيعات','الربح'],top,'لا توجد مبيعات خلال الفترة المحددة.')}</div>`;
+ const cut=Date.now()-60*864e5,sold=new Set(db.sales.filter(s=>isActiveProduct(prod(s.pid))&&new Date(s.date).getTime()>=cut).map(s=>s.pid));
+ const st=db.products.filter(p=>isActiveProduct(p)&&p.qty>0&&!sold.has(p.id)&&(p.ts||0)<cut).map(p=>`<tr><td>${pn2(p)}</td><td>${p.qty}</td><td>${fmt(p.qty*pc(p))}</td></tr>`);
+ const stale=`<div class="card"><h3>المخزون الراكد (لا مبيعات منذ 60 يوماً)</h3>${table(['المنتج','الكمية المتوفرة','القيمة بالتكلفة الحالية'],st,'لا توجد منتجات راكدة.')}</div>`;
+ const extra=`<div><span>تحصيل الذمم المدينة</span><b>${dual(coll)}</b></div><div><span>قيمة المخزون الحالية</span><b>${dual(stock)}</b></div>`;
+ return `<div class="card"><h3>تحديد فترة التقرير</h3><form onsubmit="applyReport(event)"><label>من تاريخ<input name="from" type="date" value="${from}" required></label><label>إلى تاريخ<input name="to" type="date" value="${to}" required></label><button class="go">عرض التقرير</button></form><p class="empty">التقرير من ${from} إلى ${to}. للتقرير اليومي اختر التاريخ نفسه في الحقلين، وللأسبوعي أو الشهري حدّد بداية الفترة ونهايتها.</p></div>
+ ${from>to?'<div class="card low">تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.</div>':`${kpi(o,extra)}${W.length?`<div class="card" style="margin-top:14px"><h3>مسحوبات الأرباح خلال الفترة</h3>${table(['التاريخ','المبلغ','البيان'],W,'')}</div>`:''}<div class="card" style="margin-top:14px"><h3>تفاصيل حركة المبيعات والمرتجعات</h3>${table(['التاريخ','نوع الحركة','المنتج','الكمية','القيمة'],rows,'لا توجد حركات خلال الفترة المحددة.')}</div>${best}${stale}`}`},
+inv(){const P=db.products.filter(p=>seasonMatches(p,invSeasonFilter)),qty=P.reduce((a,p)=>a+p.qty,0),cost=P.reduce((a,p)=>a+p.qty*pc(p),0),val=P.reduce((a,p)=>a+p.qty*p.price,0);
+ const activeIds=new Set(P.map(p=>p.id));const seasonSales=db.sales.filter(s=>activeIds.has(s.pid)),seasonReturns=db.returns.filter(r=>activeIds.has(r.pid)),o=summ(seasonSales,seasonReturns,[]);const soldQ=seasonSales.reduce((a,s)=>a+s.qty,0)-seasonReturns.reduce((a,r)=>a+r.qty,0);
+ const zero=P.filter(p=>p.qty<=0).length,low=P.filter(p=>p.qty>0&&p.qty<=getLow()).length;
+ const bad=db.returns.filter(r=>activeIds.has(r.pid)&&r.damaged&&r.cond!=='chk').reduce((a,r)=>a+r.qty,0),chk=db.returns.filter(r=>activeIds.has(r.pid)&&r.cond==='chk').reduce((a,r)=>a+r.qty,0);
+ const cb=cashBal(),rec=Object.values(custData()).reduce((a,c)=>a+c.rem,0),sup=db.suppliers.reduce((a,x)=>a+Math.max(supDebt(x.id),0),0)*curRate();
+ const k=(t,v,c)=>`<div><span>${t}</span><b${c?` class="${c}"`:''}>${v}</b></div>`;
+ return `<div class="card"><h3>رأس المال</h3><div class="kpi">${k('قيمة البضاعة (بتكلفة اليوم)',dual(cost))}${k('النقد المتوفر (الصندوق)',dual(cb))}<div class="net"><span>رأس المال = البضاعة + النقد</span><b>${dual(cost+cb)}</b></div></div><p class="empty">للعلم: الذمم المدينة على الزبائن ${dual(rec)}، والذمم الدائنة للموردين ${dual(sup)}. لا تدخل في الإجمالي. أضف نقدك من تبويب «الصندوق».</p></div>
+ <div class="card"><h3>المخزن — ${invSeasonFilter==='all'?'الصيفي والشتوي معاً':seasonLabel(invSeasonFilter==='active'?activeSeason():invSeasonFilter)}</h3><div class="kpi">${k('عدد الأصناف',P.length)}${k('إجمالي القطع المتوفرة',qty)}${k('قيمته بالتكلفة',dual(cost))}${k('قيمته بسعر البيع',dual(val))}${k('الربح المتوقع لو بيع كله',dual(val-cost))}${k('أصناف نفدت',zero,zero?'low':'')}${k('أصناف ناقصة',low,low?'low':'')}${k('قطع تالفة / قيد الفحص',bad+' / '+chk)}</div></div>
+ <div class="card"><h3>المباع (منذ البداية)</h3><div class="kpi">${k('القطع المباعة (صافي)',soldQ)}${k('قيمة المبيعات (صافي)',fmt(o.net))}${k('تكلفتها',fmt(o.c))}${k('ربحها',fmt(o.pr))}</div></div>
+ <div class="card"><h3>ملخص المخزون حسب الموسم</h3>${table(['الموسم','عدد الأصناف','القطع المتوفرة','في المخزن','في صالة البيع'],['winter','summer','shared'].map(sea=>{const a=P.filter(p=>seasonOf(p)===sea);return `<tr><td>${seasonLabel(sea)}</td><td>${a.length}</td><td>${a.reduce((z,p)=>z+p.qty,0)}</td><td>${a.filter(p=>p.location==='warehouse').reduce((z,p)=>z+p.qty,0)}</td><td>${a.filter(p=>p.location!=='warehouse').reduce((z,p)=>z+p.qty,0)}</td></tr>`}),'لا يوجد مخزون.')}</div>
+ <div class="card"><h3>تفاصيل الأصناف</h3><div class="filterrow"><label>بحث بالكود أو الاسم<input value="${esc(invQ)}" oninput="invSearch(this.value)" autocomplete="off"></label><label>السنة (مطابقة تامة)<input value="${esc(invYearQ)}" oninput="invYearSearch(this.value)" placeholder="مثلاً 2019" inputmode="numeric"></label><label>عرض الموسم<select onchange="setInvSeasonFilter(this.value)"><option value="all"${invSeasonFilter==='all'?' selected':''}>الصيفي والشتوي معاً</option><option value="active"${invSeasonFilter==='active'?' selected':''}>الموسم النشط فقط</option><option value="summer"${invSeasonFilter==='summer'?' selected':''}>صيفي فقط</option><option value="winter"${invSeasonFilter==='winter'?' selected':''}>شتوي فقط</option></select></label></div><div id="itab" style="margin-top:8px">${invTable()}</div></div>`},
+cash(){
+ const d=cashD||today(),c=cashOf(d),cl=closeOf(d),pv=lastClose(d),open=cl?cl.open:(pv?pv.counted:0),exp=open+c.net;
+ const rows=[['رصيد البداية',open],['+ رأس مال نقدي مضاف',c.cap],['+ مبيعات مقبوضة',c.sales],['+ ديون مردودة',c.pay],['− مرتجعات مردودة',-c.ref],['− مصاريف',-c.ex],['− مسحوبات من الأرباح',-c.wd],['− سداد ديون شخصية',-c.loan]].map(r=>`<tr><td>${r[0]}</td><td>${fmt(r[1])}</td></tr>`);
+ const hist=db.closes.slice(-10).reverse().map(x=>`<tr><td>${x.date}</td><td>${fmt(x.expected)}</td><td>${fmt(x.counted)}</td><td class="${x.diff<0?'low':''}">${x.diff>0?'+':''}${fmt(x.diff)}</td><td>${esc(x.note)}</td></tr>`);
+ return `<div class="card"><h3>إغلاق الصندوق</h3><label style="max-width:220px">اليوم<input type="date" value="${d}" onchange="setC(this.value)"></label></div>
+ <div class="card"><h3>الرصيد النقدي المتوقع: ${fmt(exp)}</h3>${table(['البند','المبلغ'],rows,'')}<p class="empty">المبالغ بالسوري. لا يشمل دفعات الموردين بالدولار.</p></div>
+ <div class="card"><h3>${cl?'أُغلق هذا اليوم (يمكنك إعادة الإغلاق)':'جرد الصندوق وإقفال اليوم'}</h3><form onsubmit="addClose(event)"><label>رصيد البداية (تلقائي من آخر إغلاق)<input name="open" type="number" step="any" value="${open}"></label><label>الرصيد النقدي الفعلي<input name="counted" type="number" step="any" min="0" required></label><label>ملاحظة<input name="note"></label><button class="go">إغلاق اليوم</button></form>
+ ${cl?`<p class="${cl.diff<0?'low':'empty'}">آخر إغلاق: المتوقع ${fmt(cl.expected)}، الفعلي ${fmt(cl.counted)}، الفرق ${cl.diff>0?'+':''}${fmt(cl.diff)} ${cl.diff<0?'(نقص)':cl.diff>0?'(زيادة)':'(مطابق)'}</p>`:''}</div>
+ ${capCard()}<div class="card"><h3>سجل إقفالات الصندوق</h3>${table(['التاريخ','المتوقع','الفعلي','الفرق','ملاحظة'],hist,'لا توجد إغلاقات بعد.')}</div>`},
+acct(){return `<div class="card"><h3>الحساب</h3><p>البيانات تُحفظ في Firebase وتعمل أيضاً بدون إنترنت، وتُزامَن عند عودة الاتصال. المبيعات والمصاريف بالسوري، والشراء وديون الموردين بالدولار.</p><p>إدارة المواسم: الموسم النشط الحالي <b>${seasonLabel(activeSeason())}</b>. لكل منتج موسم ومكان تخزين وسنة اختيارية. المخزون الافتتاحي لا ينشئ فاتورة شراء أو دين مورد. تغيير الموسم لا يحذف أي بيانات.</p><button class="go" onclick="exportJ()">تصدير نسخة احتياطية (ملف)</button> <button class="sm" onclick="out()">تسجيل الخروج</button><p></p><label style="max-width:320px">استيراد نسخة احتياطية (ملف)<input type="file" accept=".json" onchange="importJ(this)"></label><p class="empty">المؤشر في أعلى الصفحة: 🟢 متزامن مع السيرفر، 🟠 جارٍ رفع التعديلات، 🔴 بدون اتصال أو خطأ.</p></div>`}
+};
+
+const fail=x=>{serr=x.code||'error';setSync();toast('تعذّر الحفظ: '+x.code)};
+const act={
+productCostCalc(f){productCostCalc(f)},
+go(k){tab=k;if(k==='sale')saleD='';render()},setSeason(v){if(!['winter','summer'].includes(v))return;const b=writeBatch(fs);b.set(D('settings','season_config'),{activeSeason:v,updatedAt:Date.now()});b.commit().then(()=>{prodSeasonFilter='active';invSeasonFilter='active';selProd='';selSale='';selPur='';selRet='';selInv='';toast('تم تغيير الموسم النشط إلى '+seasonLabel(v)+'؛ تم فصل عرض العمليات والمخزون حسب الموسم');render()}).catch(fail)},setProductSeasonFilter(v){prodSeasonFilter='active';render()},applyReport(e){e.preventDefault();const f=e.target.elements;if(f.from.value>f.to.value)return toast('تاريخ البداية يجب ألا يتجاوز تاريخ النهاية');repFrom=f.from.value;repTo=f.to.value;render()},setRm(v){rmMode=v;render()},setRep(v){repMode=v;render()},setSup(v){selSup=v;render()},
+setRate(e){e.preventDefault();const b=writeBatch(fs);put(b,'rates',{date:today(),rate:n(e.target.elements.r.value)});b.commit().catch(fail);toast('تم حفظ سعر الصرف')},
+slCalc(f,e){const p=findP(f.code.value);if(e.target.name==='code'&&p)f.price.value=p.price;
+ let t=pinfo(f.code.value);if(p){const c=pc(p),pr=n(f.price.value);t+=` | التكلفة اليوم: ${fmt(c)} | الربح للقطعة: ${fmt(pr-c)}`}{const cb=credBal(f.cust.value.trim());if(cb>0)t+=' | رصيد الزبونة: '+fmt(cb)}$('#pinfo').innerHTML=t},
+byCalc(f,e){const p=findP(f.code.value);if(e.target.name==='code'&&p){f.usd.value=p.costUsd||'';f.sid.innerHTML=supOpts(p.supId||'')}$('#pinfo').innerHTML=pinfo(f.code.value)},
+rsCalc(f,e){const a=saleOf(selInv);if(!a)return;const t=e.target.name;
+ if(f.ncode){if(t==='var'&&f.var.value)f.ncode.value=f.var.value;
+  const p=findP(f.ncode.value);if((t==='ncode'||t==='var')&&p)f.price.value=p.price;
+  $('#pinfo').innerHTML=pinfo(f.ncode.value);
+  const val=n(f.rq.value)*a.price,tot=n(f.qty.value)*n(f.price.value),d=tot-val;
+  $('#diff').innerHTML='قيمة المُرجَع: '+fmt(val)+' | قيمة البديل: '+fmt(tot)+' | '+(d>0?'<b>تدفع الزبونة: '+fmt(d)+'</b>':d<0?'<b>نردّ للزبونة: '+fmt(-d)+'</b>':'لا فرق')}
+ else $('#diff').textContent='قيمة المرتجع: '+fmt(n(f.qty.value)*a.price)},
+login(e){e.preventDefault();const f=e.target.elements;signInWithEmailAndPassword(auth,f.email.value.trim(),f.pw.value).catch(()=>toast('بيانات الدخول غير صحيحة أو لا يوجد اتصال'))},
+out(){signOut(auth)},
+addP(e){e.preventDefault();const f=e.target.elements,code=f.code.value.trim(),q=Math.floor(n(f.qty.value)),tot=totUsd(f,q),u=q>0?tot/q:n(f.usd.value),sid=f.sid.value;
+ if(db.products.some(p=>(p.code||'').toLowerCase()===code.toLowerCase()&&seasonOf(p)===f.season.value))return toast('هذا الكود مستخدم ضمن الموسم نفسه؛ يمكنك استخدامه في الموسم الآخر.');
+ if(q>0&&!(u>0))return toast('أدخل تكلفة القطعة بالدولار أو إجمالي التكلفة لتقييم المخزون');
+ const opening=f.stockMode.value==='opening';
+ if(!opening&&f.mode.value==='credit'&&n(f.paid.value)>tot+0.005)return toast('الدين لا يمكن أن يكون أكبر من إجمالي الفاتورة');
+ const debt=opening?0:(f.mode.value==='cash'?0:Math.min(n(f.paid.value),tot)),paid=tot-debt;
+ if(!opening&&debt>0.005&&!sid)return toast('اختر المورد لتسجيل الدين');
+ const b=writeBatch(fs),pr=doc(C('products'));
+ b.set(pr,{code,name:f.name.value.trim(),year:f.year.value.trim(),season:f.season.value,location:f.location.value,seasonYear:f.year.value.trim(),supId:opening?'':sid,costUsd:u,price:n(f.price.value),qty:q,openingStock:opening,ts:Date.now()});
+ if(q>0&&!opening)put(b,'purchases',{date:today(),pid:pr.id,sid,qty:q,costUsd:u,paid});
+ b.commit().catch(fail);toast(opening?'تم تسجيل المنتج كمخزون افتتاحي دون إنشاء فاتورة شراء':'تمت الإضافة'+(debt>0.005?'. الدين للمورد: '+fmt(debt)+' $':''));e.target.reset()},
+setCode(id){const c=(prompt('الكود الجديد')||'').trim();if(!c)return;if(db.products.some(p=>(p.code||'').toLowerCase()===c.toLowerCase()&&seasonOf(p)===seasonOf(prod(id))))return toast('الكود مستخدم ضمن الموسم نفسه');const b=writeBatch(fs);b.update(D('products',id),{code:c});b.commit()},
+delP(id){const p=prod(id);if(!confirm('حذف '+p.name+'؟'))return;const b=writeBatch(fs);b.delete(D('products',id));b.commit()},
+addS(e){e.preventDefault();const f=e.target.elements,p=findP(f.code.value);if(!p)return toast('المنتج غير موجود أو غير محدد');
+ const q=Math.floor(n(f.qty.value)),pr=n(f.price.value),tot=q*pr,cust=f.cust.value.trim(),md=f.mode.value,cr=md==='credit',bl=md==='bal';
+ if(q<1)return;if(q>p.qty)return toast('الكمية المتوفرة '+p.qty+' فقط');
+ if(p.costUsd&&!curRate())return toast('أدخل سعر الصرف أولاً');
+ if((cr||bl)&&!cust)return toast('اكتب اسم الزبونة');
+ const use=bl?Math.min(credBal(cust),tot):0;if(bl&&use<=0)return toast('لا رصيد لهذه الزبونة');
+ const dt=f.date.value||today(),paid=cr?Math.min(n(f.paid.value),tot):tot,debt=tot-paid,b=writeBatch(fs),sr=doc(C('sales')),no=Math.max(0,...db.sales.map(x=>x.no||0))+1;
+ b.update(D('products',p.id),{qty:increment(-q)});
+ b.set(sr,{date:dt,pid:p.id,qty:q,price:pr,list:p.price,cost:pcAt(p,dt),cust,phone:f.phone.value.trim(),paid,cu:use,no,ts:Date.now()});
+ if(use>0)put(b,'credits',{date:dt,cust,amt:use,kind:'use',saleId:sr.id});
+ b.commit().catch(fail);toast(debt>0.005?'تم البيع. دين على '+cust+': '+fmt(debt):use>0?'تم البيع. من رصيدها '+fmt(use)+'، والمتبقي نقداً '+fmt(tot-use):'تم البيع: '+fmt(tot));e.target.reset();$('#pinfo').innerHTML=''},
+addB(e){e.preventDefault();const f=e.target.elements,p=findP(f.code.value);if(!p)return toast('المنتج غير موجود أو غير محدد');
+ const q=Math.floor(n(f.qty.value)),tot=totUsd(f,q),u=q>0?tot/q:0,sid=f.sid.value;
+ if(q<1||!(tot>0))return toast('اكتب سعر القطعة أو إجمالي الفاتورة');
+ if(f.mode.value==='credit'&&n(f.paid.value)>tot+0.005)return toast('الدين لا يمكن أن يكون أكبر من إجمالي الفاتورة');
+ const debt=f.mode.value==='cash'?0:Math.min(n(f.paid.value),tot),paid=tot-debt;
+ if(debt>0.005&&!sid)return toast('اختر المورد لتسجيل الدين');
+ const b=writeBatch(fs);b.update(D('products',p.id),{qty:increment(q),costUsd:u,...(sid&&!p.supId?{supId:sid}:{})});
+ put(b,'purchases',{date:today(),pid:p.id,sid,qty:q,costUsd:u,paid});
+ b.commit().catch(fail);toast(debt>0.005?'تم الشراء. الدين للمورد: '+fmt(debt)+' $':'تم الشراء');e.target.reset();$('#pinfo').innerHTML=''},
+addSup(e){e.preventDefault();const b=writeBatch(fs);put(b,'suppliers',{name:e.target.elements.name.value.trim()});b.commit().catch(fail);toast('تمت إضافة المورد');e.target.reset()},
+paySup(id){const v=n(prompt('مبلغ الدفعة بالدولار'));if(v<=0)return;const b=writeBatch(fs);put(b,'spay',{date:today(),sid:id,amt:v});b.commit();toast('تم تسجيل الدفعة')},
+setCust(c){selCust=c;render()},
+payAll(c){const d=custData()[c];if(!d||d.rem<=0.005)return;if(!confirm('تسجيل سداد '+fmt(d.rem)+' من '+c+'؟'))return;const b=writeBatch(fs);put(b,'pay',{date:today(),cust:c,amt:d.rem});b.commit();toast('تم السداد الكامل')},
+psearch(v){prodQ=v;$('#ptab').innerHTML=prodTable()},productYearSearch(v){prodYearQ=v;$('#ptab').innerHTML=prodTable()},invYearSearch(v){invYearQ=v;$('#itab').innerHTML=invTable()},setInvSeasonFilter(v){invSeasonFilter=v;$('#itab').innerHTML=invTable()},
+setProd(id){selProd=id;render();window.scrollTo(0,0)},
+cancelEdit(){selSale='';selProd='';selPur='';selRet='';render()},
+saveProd(e){e.preventDefault();const f=e.target.elements,p=prod(selProd),code=f.code.value.trim();
+ if(code&&db.products.some(x=>x.id!==p.id&&(x.code||'').toLowerCase()===code.toLowerCase()))return toast('الكود مستخدم لمنتج آخر');
+ const b=writeBatch(fs);b.update(D('products',p.id),{code,name:f.name.value.trim(),year:f.year.value.trim(),season:f.season.value,location:f.location.value,seasonYear:f.year.value.trim(),supId:f.sid.value,costUsd:n(f.usd.value),price:n(f.price.value),qty:Math.floor(n(f.qty.value))});
+ b.commit().catch(fail);selProd='';toast('تم حفظ التعديل');render()},
+setSale(id){const s=saleOf(id);if(s&&s.swap)return toast('فواتير التبديل لا تُعدَّل');selSale=id;render();window.scrollTo(0,0)},
+saveSale(e){e.preventDefault();const f=e.target.elements,s=saleOf(selSale),p=prod(s.pid),q=Math.floor(n(f.qty.value)),pr=n(f.price.value),tot=q*pr,cust=f.cust.value.trim(),ret=s.qty-left(s);
+ if(s.cu>0)return toast('فاتورة مدفوعة من الرصيد: ألغها وأعد تسجيلها');if(q<1||q<ret)return toast('أقل كمية ممكنة '+Math.max(ret,1));
+ if(p&&q-s.qty>p.qty)return toast('المتوفر للزيادة '+p.qty+' فقط');
+ const paid=f.paid.value===''?tot:Math.min(n(f.paid.value),tot);
+ if(paid<tot&&!cust)return toast('اكتب اسم الزبون لتسجيل الدين');
+ const b=writeBatch(fs);b.update(D('sales',s.id),{date:f.date.value||s.date,qty:q,price:pr,cust,paid});
+ if(p&&q!==s.qty)b.update(D('products',p.id),{qty:increment(s.qty-q)});
+ b.commit().catch(fail);selSale='';toast('تم تعديل الفاتورة');render()},
+delSale(){const s=saleOf(selSale);if(!s)return;if(left(s)!==s.qty)return toast('عليها مرتجع، لا يمكن إلغاؤها');if(!confirm('إلغاء هذه الفاتورة وإعادة القطع للمخزون؟'))return;
+ const b=writeBatch(fs);b.delete(D('sales',s.id));db.credits.filter(x=>x.saleId===s.id).forEach(x=>b.delete(D('credits',x.id)));if(prod(s.pid))b.update(D('products',s.pid),{qty:increment(s.qty)});b.commit().catch(fail);selSale='';toast('تم إلغاء الفاتورة');render()},
+setLow(v){try{localStorage.setItem('low',n(v))}catch(e){}render()},
+togLow(){lowOnly=!lowOnly;render()},
+goLow(){tab='products';lowOnly=true;render()},
+setC(v){cashD=v;render()},
+addClose(e){e.preventDefault();const f=e.target.elements,d=cashD||today(),o=n(f.open.value),ex=o+cashOf(d).net,cnt=n(f.counted.value),b=writeBatch(fs);
+ put(b,'closes',{date:d,open:o,expected:ex,counted:cnt,diff:cnt-ex,note:f.note.value.trim()});b.commit().catch(fail);toast('تم إغلاق الصندوق');e.target.reset()},
+setPur(id){selPur=id;render();window.scrollTo(0,0)},
+savePur(e){e.preventDefault();const f=e.target.elements,o=db.purchases.find(x=>x.id===selPur),p=prod(o.pid),q=Math.floor(n(f.qty.value)),tot=n(f.tot.value),sid=f.sid.value,debt=Math.min(n(f.paid.value),tot),paid=tot-debt,u=q>0?tot/q:0;
+ if(q<1||!(tot>0))return toast('اكتب الكمية والإجمالي');
+ if(debt>0.005&&!sid)return toast('اختر المورد لتسجيل الدين');
+ if(p&&p.qty+q-o.qty<0)return toast('لا يمكن تقليل الكمية: بعتَ منها');
+ const last=!db.purchases.some(x=>x.pid===o.pid&&(x.ts||0)>(o.ts||0)),b=writeBatch(fs);
+ b.update(D('purchases',o.id),{qty:q,costUsd:u,sid,paid});
+ if(p)b.update(D('products',p.id),{qty:increment(q-o.qty),...(last?{costUsd:u}:{})});
+ b.commit().catch(fail);selPur='';toast('تم تعديل فاتورة الشراء');render()},
+delPur(){const o=db.purchases.find(x=>x.id===selPur);if(!o)return;const p=prod(o.pid);if(p&&p.qty-o.qty<0)return toast('لا يمكن إلغاؤها: بعتَ من هذه الكمية');if(!confirm('إلغاء فاتورة الشراء وإنقاص الكمية من المخزون؟'))return;
+ const prev=db.purchases.filter(x=>x.pid===o.pid&&x.id!==o.id&&(x.ts||0)<(o.ts||0)).pop(),last=!db.purchases.some(x=>x.pid===o.pid&&(x.ts||0)>(o.ts||0)),b=writeBatch(fs);
+ b.delete(D('purchases',o.id));if(p)b.update(D('products',p.id),{qty:increment(-o.qty),...(last&&prev?{costUsd:prev.costUsd}:{})});
+ b.commit().catch(fail);selPur='';toast('تم إلغاء فاتورة الشراء');render()},
+saleDate(v){saleD=v||'';const el=$('#slog');if(el)el.innerHTML=slogHtml()},
+rsDate(v){rsD=v;$('#rres').innerHTML=rsResults()},
+purSearch(v){purQ=v;$('#pt').innerHTML=purTable()},
+invSearch(v){invQ=v;$('#itab').innerHTML=invTable()},
+addCap(e){e.preventDefault();const f=e.target.elements,b=writeBatch(fs);put(b,'capital',{date:f.date.value||today(),amt:n(f.amt.value),note:f.note.value.trim()});b.commit().catch(fail);toast('تمت إضافة المبلغ');e.target.reset()},
+delCap(id){if(!confirm('حذف هذه الإضافة؟'))return;const b=writeBatch(fs);b.delete(D('capital',id));b.commit().catch(fail)},
+goSup(id){selSup=id;tab='sup';render()},
+pickInv(id){selInv=id;render()},
+rsSearch(v){rsQ=v;$('#rres').innerHTML=rsResults()},
+addR(e){e.preventDefault();const f=e.target.elements,s=saleOf(selInv),q=Math.floor(n(f.qty.value)),cond=f.cond.value,md=f.method.value,cust=f.cust.value.trim();
+ if(!s||!prod(s.pid))return toast('اختر الفاتورة الأصلية أولاً');
+ if(q<1||q>left(s))return toast('المتبقي للإرجاع '+left(s));
+ const val=q*s.price;
+ if(md==='credit'&&!cust)return toast('اكتب اسم الزبونة لتسجيل الرصيد');
+ if(md==='debt'){const d=custData()[s.cust||cust];if(!d||d.rem<=0.005)return toast('لا دين على هذه الزبونة. اختر نقداً أو رصيد')}
+ const b=writeBatch(fs),rr=doc(C('returns'));if(cond==='ok')b.update(D('products',s.pid),{qty:increment(q)});
+ b.set(rr,{date:today(),saleId:s.id,pid:s.pid,qty:q,value:val,refund:md==='cash'?val:0,method:md,cost:s.cost,cust:md==='debt'?(s.cust||cust):'',damaged:cond!=='ok',cond,reason:f.reason.value,note:f.note.value.trim(),ts:Date.now()});
+ if(md==='credit')put(b,'credits',{date:today(),cust,amt:val,kind:'add',retId:rr.id});
+ b.commit().catch(fail);toast('تم تسجيل المرتجع: '+fmt(val));selInv='';render()},
+addW(e){e.preventDefault();const f=e.target.elements,a=saleOf(selInv),rq=Math.floor(n(f.rq.value)),pB=findP(f.ncode.value),q=Math.floor(n(f.qty.value)),pr=n(f.price.value),cond=f.cond.value,md=f.mode.value,cust=f.cust.value.trim();
+ if(!a||!prod(a.pid))return toast('اختر الفاتورة الأصلية أولاً');if(!pB)return toast('المنتج البديل غير موجود أو غير محدد');
+ if(rq<1||rq>left(a))return toast('المتبقي للإرجاع '+left(a));
+ if(pB.costUsd&&!curRate())return toast('أدخل سعر الصرف أولاً');
+ const back=cond==='ok'?rq:0,av=pB.qty+(pB.id===a.pid?back:0);if(q>av)return toast('الكمية المتوفرة '+av+' فقط');
+ const val=rq*a.price,tot=q*pr,diff=tot-val;
+ if(diff>0.005&&md==='credit')return toast('الفرق لصالحك: اختر نقداً أو دين');
+ if(diff<-0.005&&md==='debt')return toast('الفرق لصالح الزبونة: اختر نقداً أو رصيد');
+ const cr=diff>0.005&&md==='debt',cd=diff<-0.005&&md==='credit'?-diff:0;
+ if((cr||cd)&&!cust)return toast('اكتب اسم الزبونة');
+ const now=cr?Math.min(n(f.paid.value),diff):0,paid=cr?val+now:tot,wid=Date.now().toString(36)+Math.random().toString(36).slice(2,5),b=writeBatch(fs);
+ if(pB.id===a.pid){if(back-q)b.update(D('products',pB.id),{qty:increment(back-q)})}
+ else{if(back)b.update(D('products',a.pid),{qty:increment(back)});b.update(D('products',pB.id),{qty:increment(-q)})}
+ put(b,'returns',{date:today(),saleId:a.id,pid:a.pid,qty:rq,value:val,refund:0,cost:a.cost,cust:'',swap:true,damaged:cond!=='ok',cond,reason:f.reason.value,note:f.note.value.trim(),credited:cd,wid});
+ put(b,'sales',{date:today(),pid:pB.id,qty:q,price:pr,list:pB.price,cost:pc(pB),cust:cr?cust:'',paid,swap:true,wid});
+ if(cd>0)put(b,'credits',{date:today(),cust,amt:cd,kind:'add',wid});
+ b.commit().catch(fail);toast(diff>0.005?(cr?'تم الاستبدال. دين على '+cust+': '+fmt(diff-now):'تدفع الزبونة '+fmt(diff)):diff<-0.005?(cd?'أُضيف رصيد '+fmt(cd)+' للزبونة':'نردّ للزبونة '+fmt(-diff)):'استبدال بلا فرق');selInv='';render()},
+inspect(id,v){const r=db.returns.find(x=>x.id===id);if(!r)return;const b=writeBatch(fs);
+ if(v==='ok'){b.update(D('returns',id),{cond:'ok',damaged:false});if(prod(r.pid))b.update(D('products',r.pid),{qty:increment(r.qty)})}else b.update(D('returns',id),{cond:'bad'});
+ b.commit().catch(fail);toast(v==='ok'?'أُعيدت القطعة للمخزون':'سُجّلت كتالفة')},
+setRet(id){selRet=id;render();window.scrollTo(0,0)},
+saveRet(e){e.preventDefault();const f=e.target.elements,r=db.returns.find(x=>x.id===selRet),s=saleOf(r.saleId),p=prod(r.pid),q=Math.floor(n(f.qty.value));
+ if(!s)return toast('الفاتورة الأصلية غير موجودة');
+ if(q<1||q>left(s)+r.qty)return toast('الحد الأقصى '+(left(s)+r.qty));
+ const val=q*s.price,rf=r.method==='cash'?val:r.method?0:(r.refund>=r.value-0.005?val:r.refund);
+ const dq=r.damaged?0:q-r.qty;if(p&&p.qty+dq<0)return toast('بعتَ من القطعة المُرجَعة');
+ const b=writeBatch(fs);b.update(D('returns',r.id),{qty:q,value:val,refund:rf});db.credits.filter(x=>x.retId===r.id).forEach(x=>b.update(D('credits',x.id),{amt:val}));
+ if(p&&dq)b.update(D('products',p.id),{qty:increment(dq)});
+ b.commit().catch(fail);selRet='';toast('تم تعديل المرتجع');render()},
+delRet(id){const r=db.returns.find(x=>x.id===id);if(!r)return;
+ const cs=db.credits.filter(x=>x.retId===id||(r.wid&&x.wid===r.wid));
+ if(cs.length&&credBal(cs[0].cust)-cs.reduce((a,x)=>a+x.amt,0)<-0.005)return toast('رصيد هذه العملية استُخدم بالفعل');
+ if(r.swap){const sb=db.sales.find(x=>x.swap&&(r.wid?x.wid===r.wid:Math.abs((x.ts||0)-(r.ts||0))<1000));if(!sb)return toast('تعذّر العثور على فاتورة التبديل');
+  if(left(sb)!==sb.qty)return toast('على فاتورة التبديل مرتجع، ألغه أولاً');
+  const d={},add=(k,v)=>{d[k]=(d[k]||0)+v};if(!r.damaged)add(r.pid,-r.qty);add(sb.pid,sb.qty);
+  for(const [k,v] of Object.entries(d)){const p=prod(k);if(p&&p.qty+v<0)return toast('لا يمكن الإلغاء: المخزون لا يكفي')}
+  if(!confirm('إلغاء التبديل وعكس أثره على المخزون؟'))return;
+  const b=writeBatch(fs);b.delete(D('returns',r.id));b.delete(D('sales',sb.id));cs.forEach(x=>b.delete(D('credits',x.id)));Object.entries(d).forEach(([k,v])=>{if(prod(k)&&v)b.update(D('products',k),{qty:increment(v)})});b.commit().catch(fail);toast('تم إلغاء التبديل');return}
+ const p=prod(r.pid),dq=r.damaged?0:-r.qty;if(p&&p.qty+dq<0)return toast('بعتَ من القطعة المُرجَعة');if(!confirm('إلغاء هذا المرتجع؟'))return;
+ const b=writeBatch(fs);b.delete(D('returns',r.id));cs.forEach(x=>b.delete(D('credits',x.id)));if(p&&dq)b.update(D('products',p.id),{qty:increment(dq)});b.commit().catch(fail);toast('تم إلغاء المرتجع')},
+addE(e){e.preventDefault();const f=e.target.elements,wd=f.kind.value==='wd',b=writeBatch(fs);
+ if(!wd&&!f.desc.value.trim())return toast('اكتب البند');
+ put(b,'expenses',{date:f.date.value||today(),desc:wd?'سحب من الأرباح':f.desc.value.trim(),amt:n(f.amt.value),note:f.note.value.trim(),wd});
+ b.commit().catch(fail);toast(wd?'تم تسجيل السحب':'تم حفظ المصروف');e.target.reset()},
+delE(id){if(!confirm('حذف هذا المصروف؟'))return;const b=writeBatch(fs);b.delete(D('expenses',id));b.commit()},
+payD(c){const d=custData()[c];if(!d)return;const v=n(prompt('مبلغ الدفعة من '+c+' (المتبقي '+fmt(d.rem)+')'));if(v<=0)return;if(v>d.rem+0.005)return toast('المبلغ أكبر من المتبقي');const b=writeBatch(fs);put(b,'pay',{date:today(),cust:c,amt:v});b.commit();toast('تم تسجيل الدفعة')},
+addLoan(e){e.preventDefault();const f=e.target.elements,b=writeBatch(fs);put(b,'loans',{date:today(),name:f.name.value.trim(),amt:n(f.amt.value),note:f.note.value.trim()});b.commit().catch(fail);toast('تم تسجيل الدين');e.target.reset()},
+importJ(inp){const f=inp.files[0];if(!f)return;f.text().then(t=>{let d;try{d=JSON.parse(t)}catch(e){return toast('ملف غير صالح')}
+ const items=[];NAMES.forEach(k=>(d[k]||[]).forEach(x=>{if(x&&x.id)items.push([k,x])}));
+ if(!items.length)return toast('لا توجد بيانات في الملف');
+ if(!confirm('استيراد '+items.length+' سجل؟ السجلات المتطابقة ستُستبدل.'))return;
+ for(let i=0;i<items.length;i+=400){const b=writeBatch(fs);items.slice(i,i+400).forEach(([k,x])=>{const {id,...r}=x;b.set(D(k,id),r)});b.commit().catch(fail)}
+ toast('بدأ الاستيراد: '+items.length+' سجل');inp.value=''})},
+exportJ(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='backup-'+today()+'.json';a.click()}
+};
+Object.assign(window,act);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
